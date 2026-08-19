@@ -82,4 +82,25 @@ export type Prescription = {
   status: PrescriptionStatus;
   uploaded_by: string;
   created_at: string;
+  extracted_patient_name: string | null;
+  patient_name_needs_review: boolean;
+  follow_up_required: boolean | null;
+  follow_up_days_after: number | null;
+  follow_up_instruction: string | null;
+  follow_up_needs_review: boolean;
+  extraction_error: string | null;
+};
+
+export type PrescriptionMedicine = {
+  id: string;
+  prescription_id: string;
+  clinic_id: string;
+  name: string;
+  dosage: string | null;
+  frequency: string | null;
+  duration_days: number | null;
+  timings: string[] | null;
+  instruction: string | null;
+  needs_review: boolean;
+  created_at: string;
 };

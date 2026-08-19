@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { createPrescriptionRecord } from "@/lib/actions/prescriptions";
+import { createPrescriptionRecord, processPrescription } from "@/lib/actions/prescriptions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,6 +35,7 @@ export function PrescriptionUploadForm({
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [stage, setStage] = useState<"idle" | "uploading" | "extracting">("idle");
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -52,6 +53,7 @@ export function PrescriptionUploadForm({
 
     setPending(true);
     try {
+      setStage("uploading");
       const supabase = createClient();
       const ext = file.name.split(".").pop();
       const path = `${clinicId}/${patientId}/${crypto.randomUUID()}.${ext}`;
@@ -77,9 +79,13 @@ export function PrescriptionUploadForm({
         return;
       }
 
+      setStage("extracting");
+      await processPrescription(result.id);
+
       router.push(`/clinic/prescriptions/${result.id}`);
     } finally {
       setPending(false);
+      setStage("idle");
     }
   }
 
@@ -138,7 +144,9 @@ export function PrescriptionUploadForm({
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <Button type="submit" disabled={pending} className="w-fit">
-        {pending ? "Uploading..." : "Upload Prescription"}
+        {stage === "uploading" && "Uploading..."}
+        {stage === "extracting" && "Extracting with Gemini..."}
+        {stage === "idle" && "Upload Prescription"}
       </Button>
     </form>
   );

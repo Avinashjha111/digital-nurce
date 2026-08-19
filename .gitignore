@@ -37,6 +37,10 @@ yarn-error.log*
 # local test fixtures (never commit disposable test credentials)
 .browser-test-users.json
 .clinic-staff-test-user.json
+.test-prescription*.png
+
+# Claude Code session runtime state (not project config)
+.claude/scheduled_tasks.lock
 
 # vercel
 .vercel
