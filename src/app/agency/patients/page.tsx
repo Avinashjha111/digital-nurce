@@ -55,7 +55,7 @@ export default async function AgencyPatientsPage() {
                   <TableRow key={patient.id}>
                     <TableCell className="font-medium">{patient.name}</TableCell>
                     <TableCell>{patient.clinics?.name ?? "—"}</TableCell>
-                    <TableCell>{patient.whatsapp_number}</TableCell>
+                    <TableCell>+{patient.whatsapp_number}</TableCell>
                     <TableCell>
                       {new Date(patient.created_at).toLocaleDateString()}
                     </TableCell>

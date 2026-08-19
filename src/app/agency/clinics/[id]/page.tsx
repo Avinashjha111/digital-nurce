@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { ConnectWhatsAppDialog } from "@/components/clinic/connect-whatsapp-dialog";
 import type { Clinic, Doctor } from "@/lib/types";
 
 export default async function ClinicDetailPage({
@@ -68,14 +68,18 @@ export default async function ClinicDetailPage({
               }
             />
             <Row label="WhatsApp number" value={clinic.whatsapp_number ?? "—"} />
-            <Row label="Provider status" value="—" />
-            <Row label="Last connection check" value="—" />
-            <Button disabled className="mt-2 w-fit">
-              Connect WhatsApp
-            </Button>
-            <p className="text-xs text-muted-foreground">
-              WhatsApp connection lands in Milestone 4.
-            </p>
+            <Row label="Provider status" value={connected ? "Active" : "—"} />
+            <Row
+              label="Last connection check"
+              value={
+                clinic.whatsapp_last_checked_at
+                  ? new Date(clinic.whatsapp_last_checked_at).toLocaleString()
+                  : "—"
+              }
+            />
+            <div className="mt-2">
+              <ConnectWhatsAppDialog clinicId={clinic.id} />
+            </div>
           </CardContent>
         </Card>
       </div>

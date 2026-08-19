@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import {
   User,
   MessageSquare,
@@ -9,7 +10,8 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { Patient } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import type { Conversation, Patient } from "@/lib/types";
 
 export default async function ClinicPatientDetailPage({
   params,
@@ -27,6 +29,12 @@ export default async function ClinicPatientDetailPage({
 
   if (!patient) notFound();
 
+  const { data: conversation } = await supabase
+    .from("conversations")
+    .select("*")
+    .eq("patient_id", id)
+    .maybeSingle<Conversation>();
+
   return (
     <div>
       <PageHeader title={patient.name} description="Patient profile." />
@@ -40,7 +48,7 @@ export default async function ClinicPatientDetailPage({
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3 text-sm">
-            <Row label="WhatsApp number" value={patient.whatsapp_number} />
+            <Row label="WhatsApp number" value={`+${patient.whatsapp_number}`} />
             <Row
               label="Registered"
               value={new Date(patient.created_at).toLocaleDateString()}
@@ -48,11 +56,25 @@ export default async function ClinicPatientDetailPage({
           </CardContent>
         </Card>
 
-        <StubSection
-          icon={MessageSquare}
-          title="Conversation History"
-          milestone="WhatsApp messages with this patient land in Milestone 4."
-        />
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <MessageSquare className="h-4 w-4" />
+              Conversation History
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {conversation ? (
+              <Button size="sm" render={<Link href={`/clinic/inbox/${conversation.id}`} />}>
+                Open Conversation
+              </Button>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No WhatsApp messages with this patient yet.
+              </p>
+            )}
+          </CardContent>
+        </Card>
         <StubSection
           icon={FileText}
           title="Prescriptions"

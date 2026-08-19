@@ -64,7 +64,7 @@ export default async function ClinicPatientsPage() {
                         {patient.name}
                       </Link>
                     </TableCell>
-                    <TableCell>{patient.whatsapp_number}</TableCell>
+                    <TableCell>+{patient.whatsapp_number}</TableCell>
                     <TableCell>
                       {new Date(patient.created_at).toLocaleDateString()}
                     </TableCell>

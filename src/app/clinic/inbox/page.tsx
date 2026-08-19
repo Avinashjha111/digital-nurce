@@ -1,16 +1,10 @@
-import { Inbox } from "lucide-react";
-import { PageHeader } from "@/components/layout/page-header";
-import { ComingSoon } from "@/components/coming-soon";
+import { MessageSquare } from "lucide-react";
 
-export default function ClinicInboxPage() {
+export default function ClinicInboxIndexPage() {
   return (
-    <div>
-      <PageHeader title="Inbox" description="WhatsApp conversations with your patients." />
-      <ComingSoon
-        icon={Inbox}
-        title="WhatsApp inbox lands in Milestone 4"
-        milestone="Send/receive messages, delivery status and human attention flags."
-      />
+    <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-muted-foreground">
+      <MessageSquare className="h-8 w-8" />
+      <p className="text-sm">Select a conversation to view messages.</p>
     </div>
   );
 }

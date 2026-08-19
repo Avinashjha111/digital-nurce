@@ -5,12 +5,18 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/supabase/profile";
+import { normalizePhone } from "@/lib/phone";
 
 export type CreatePatientState = { error: string | null };
 
 const patientSchema = z.object({
   name: z.string().trim().min(1, "Patient name is required"),
-  whatsapp_number: z.string().trim().min(1, "WhatsApp number is required"),
+  whatsapp_number: z
+    .string()
+    .trim()
+    .min(1, "WhatsApp number is required")
+    .transform(normalizePhone)
+    .refine((v) => v.length >= 10, "Enter a valid WhatsApp number with country code"),
 });
 
 export async function createPatient(
