@@ -36,6 +36,7 @@ yarn-error.log*
 
 # local test fixtures (never commit disposable test credentials)
 .browser-test-users.json
+.clinic-staff-test-user.json
 
 # vercel
 .vercel

@@ -29,3 +29,11 @@ export type Doctor = {
   name: string;
   created_at: string;
 };
+
+export type Patient = {
+  id: string;
+  clinic_id: string;
+  name: string;
+  whatsapp_number: string;
+  created_at: string;
+};

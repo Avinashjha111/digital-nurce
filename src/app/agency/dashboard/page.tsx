@@ -8,10 +8,13 @@ export default async function AgencyDashboardPage() {
   const { count: clinicCount } = await supabase
     .from("clinics")
     .select("*", { count: "exact", head: true });
+  const { count: patientCount } = await supabase
+    .from("patients")
+    .select("*", { count: "exact", head: true });
 
   const stats = [
     { label: "Total Clinics", value: clinicCount ?? 0, icon: Building2 },
-    { label: "Total Patients", value: "—", icon: Users },
+    { label: "Total Patients", value: patientCount ?? 0, icon: Users },
     { label: "Prescriptions Awaiting Review", value: "—", icon: FileText },
     { label: "Active Reminders", value: "—", icon: Bell },
   ];
