@@ -63,6 +63,15 @@ export function ConnectWhatsAppDialog({ clinicId }: { clinicId: string }) {
               <Label htmlFor="access_token">Access token</Label>
               <Input id="access_token" name="access_token" type="password" required />
             </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="meta_app_id">
+                Meta App ID{" "}
+                <span className="font-normal text-muted-foreground">
+                  (optional -- only needed for image/video/document template headers)
+                </span>
+              </Label>
+              <Input id="meta_app_id" name="meta_app_id" />
+            </div>
             {state.error && (
               <p className="text-sm text-destructive">{state.error}</p>
             )}

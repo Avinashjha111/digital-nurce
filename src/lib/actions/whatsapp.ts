@@ -13,6 +13,7 @@ const connectSchema = z.object({
   phone_number_id: z.string().trim().min(1, "Phone Number ID is required"),
   access_token: z.string().trim().min(1, "Access token is required"),
   waba_id: z.string().trim().min(1, "WhatsApp Business Account ID is required"),
+  meta_app_id: z.string().trim().optional(),
 });
 
 export async function connectWhatsApp(
@@ -29,6 +30,7 @@ export async function connectWhatsApp(
     phone_number_id: formData.get("phone_number_id"),
     access_token: formData.get("access_token"),
     waba_id: formData.get("waba_id"),
+    meta_app_id: formData.get("meta_app_id"),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
@@ -65,6 +67,7 @@ export async function connectWhatsApp(
     phone_number_id: parsed.data.phone_number_id,
     access_token: parsed.data.access_token,
     waba_id: parsed.data.waba_id,
+    meta_app_id: parsed.data.meta_app_id || null,
     updated_at: new Date().toISOString(),
   });
 

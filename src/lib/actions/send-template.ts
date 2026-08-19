@@ -41,7 +41,7 @@ export async function sendTemplateMessage(
 
   const { data: template } = await supabase
     .from("whatsapp_templates")
-    .select("id, clinic_id, name, language, body_text, status")
+    .select("id, clinic_id, name, language, body_text, status, header_type, header_text")
     .eq("id", templateId)
     .single();
   if (!template) {
@@ -49,6 +49,29 @@ export async function sendTemplateMessage(
   }
   if (template.status !== "approved") {
     return { error: "Only approved templates can be sent." };
+  }
+  if (
+    template.header_type === "image" ||
+    template.header_type === "video" ||
+    template.header_type === "document" ||
+    template.header_type === "location"
+  ) {
+    return {
+      error:
+        "Sending templates with an image, video, document, or location header isn't supported yet -- use a text-only or no-header template.",
+    };
+  }
+
+  let headerParameter: string | undefined;
+  if (template.header_type === "text" && template.header_text) {
+    const headerPlaceholders = extractPlaceholders(template.header_text);
+    if (headerPlaceholders.length > 0) {
+      const value = String(formData.get("header_param") ?? "").trim();
+      if (!value) {
+        return { error: "Provide a value for the header variable." };
+      }
+      headerParameter = value;
+    }
   }
 
   const placeholders = extractPlaceholders(template.body_text);
@@ -80,6 +103,7 @@ export async function sendTemplateMessage(
     templateName: template.name,
     languageCode: template.language,
     parameters,
+    headerParameter,
   });
 
   // Template sends can start a brand-new conversation, so find-or-create

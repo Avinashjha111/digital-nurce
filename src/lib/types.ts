@@ -107,6 +107,19 @@ export type PrescriptionMedicine = {
 
 export type WhatsappTemplateStatus = "pending" | "approved" | "rejected" | "disabled";
 export type WhatsappTemplateCategory = "utility" | "marketing" | "authentication";
+export type WhatsappTemplateHeaderType =
+  | "none"
+  | "text"
+  | "image"
+  | "video"
+  | "document"
+  | "location";
+
+export type WhatsappTemplateButton =
+  | { type: "QUICK_REPLY"; text: string }
+  | { type: "URL"; text: string; url: string }
+  | { type: "PHONE_NUMBER"; text: string; phoneNumber: string }
+  | { type: "COPY_CODE"; example: string };
 
 export type WhatsappTemplate = {
   id: string;
@@ -115,6 +128,11 @@ export type WhatsappTemplate = {
   category: WhatsappTemplateCategory;
   language: string;
   body_text: string;
+  header_type: WhatsappTemplateHeaderType;
+  header_text: string | null;
+  header_media_path: string | null;
+  footer_text: string | null;
+  buttons: WhatsappTemplateButton[];
   meta_template_id: string | null;
   status: WhatsappTemplateStatus;
   rejection_reason: string | null;

@@ -5,6 +5,15 @@
 
 const GRAPH_API_VERSION = "v21.0";
 
+// Meta's error_user_msg is the specific, actionable reason (e.g. "Variables
+// can't be at the start or end of the template"); error.message is often
+// just a generic "Invalid parameter" that hides it.
+export function metaErrorMessage(json: unknown, fallback: string): string {
+  const error = (json as { error?: { error_user_msg?: string; message?: string } } | null)
+    ?.error;
+  return error?.error_user_msg ?? error?.message ?? fallback;
+}
+
 export type SendMessageResult =
   | { ok: true; providerMessageId: string }
   | { ok: false; error: string };
@@ -42,7 +51,7 @@ export async function sendWhatsAppMessage({
   if (!res.ok) {
     return {
       ok: false,
-      error: json?.error?.message ?? `WhatsApp API error (${res.status})`,
+      error: metaErrorMessage(json, `WhatsApp API error (${res.status})`),
     };
   }
 
@@ -61,6 +70,7 @@ export async function sendWhatsAppTemplateMessage({
   templateName,
   languageCode,
   parameters,
+  headerParameter,
 }: {
   phoneNumberId: string;
   accessToken: string;
@@ -68,7 +78,22 @@ export async function sendWhatsAppTemplateMessage({
   templateName: string;
   languageCode: string;
   parameters: string[];
+  headerParameter?: string;
 }): Promise<SendMessageResult> {
+  const components: unknown[] = [];
+  if (headerParameter) {
+    components.push({
+      type: "header",
+      parameters: [{ type: "text", text: headerParameter }],
+    });
+  }
+  if (parameters.length > 0) {
+    components.push({
+      type: "body",
+      parameters: parameters.map((text) => ({ type: "text", text })),
+    });
+  }
+
   const res = await fetch(
     `https://graph.facebook.com/${GRAPH_API_VERSION}/${phoneNumberId}/messages`,
     {
@@ -84,16 +109,7 @@ export async function sendWhatsAppTemplateMessage({
         template: {
           name: templateName,
           language: { code: languageCode },
-          ...(parameters.length > 0
-            ? {
-                components: [
-                  {
-                    type: "body",
-                    parameters: parameters.map((text) => ({ type: "text", text })),
-                  },
-                ],
-              }
-            : {}),
+          ...(components.length > 0 ? { components } : {}),
         },
       }),
     }
@@ -104,7 +120,7 @@ export async function sendWhatsAppTemplateMessage({
   if (!res.ok) {
     return {
       ok: false,
-      error: json?.error?.message ?? `WhatsApp API error (${res.status})`,
+      error: metaErrorMessage(json, `WhatsApp API error (${res.status})`),
     };
   }
 
@@ -136,7 +152,7 @@ export async function verifyWhatsAppCredentials({
   if (!res.ok) {
     return {
       ok: false,
-      error: json?.error?.message ?? `Could not verify credentials (${res.status})`,
+      error: metaErrorMessage(json, `Could not verify credentials (${res.status})`),
     };
   }
 
