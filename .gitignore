@@ -34,6 +34,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# local test fixtures (never commit disposable test credentials)
+.browser-test-users.json
+
 # vercel
 .vercel
 

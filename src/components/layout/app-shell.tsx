@@ -5,23 +5,25 @@ import { Menu, Stethoscope } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
-import { SidebarNav, type NavItem } from "@/components/layout/sidebar-nav";
+import { SidebarNav } from "@/components/layout/sidebar-nav";
+import { agencyNavItems, clinicNavItems } from "@/components/layout/nav-items";
 import { LogoutButton } from "@/components/logout-button";
 
 export function AppShell({
-  navItems,
+  variant,
   appName,
   badgeLabel,
   userLabel,
   children,
 }: {
-  navItems: NavItem[];
+  variant: "agency" | "clinic";
   appName: string;
   badgeLabel: string;
   userLabel: string;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const navItems = variant === "agency" ? agencyNavItems : clinicNavItems;
 
   const brand = (
     <div className="flex items-center gap-2 px-2 py-1">

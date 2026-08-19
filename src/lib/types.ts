@@ -8,3 +8,24 @@ export type Profile = {
   clinic_id: string | null;
   created_at: string;
 };
+
+export type WhatsappStatus = "not_connected" | "connected";
+
+export type Clinic = {
+  id: string;
+  name: string;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  whatsapp_number: string | null;
+  whatsapp_status: WhatsappStatus;
+  created_by: string;
+  created_at: string;
+};
+
+export type Doctor = {
+  id: string;
+  clinic_id: string;
+  name: string;
+  created_at: string;
+};

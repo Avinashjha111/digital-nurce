@@ -1,19 +1,45 @@
-import { LayoutDashboard } from "lucide-react";
+import { Building2, Users, FileText, Bell } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/layout/page-header";
-import { ComingSoon } from "@/components/coming-soon";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-export default function AgencyDashboardPage() {
+export default async function AgencyDashboardPage() {
+  const supabase = await createClient();
+  const { count: clinicCount } = await supabase
+    .from("clinics")
+    .select("*", { count: "exact", head: true });
+
+  const stats = [
+    { label: "Total Clinics", value: clinicCount ?? 0, icon: Building2 },
+    { label: "Total Patients", value: "—", icon: Users },
+    { label: "Prescriptions Awaiting Review", value: "—", icon: FileText },
+    { label: "Active Reminders", value: "—", icon: Bell },
+  ];
+
   return (
     <div>
       <PageHeader
         title="Dashboard"
         description="Overview of clinics, patients, prescriptions and reminders."
       />
-      <ComingSoon
-        icon={LayoutDashboard}
-        title="Live metrics arrive as later milestones ship"
-        milestone="Clinic, patient, prescription and reminder counts populate here starting Milestone 2."
-      />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {stats.map((stat) => (
+          <Card key={stat.label}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                {stat.label}
+              </CardTitle>
+              <stat.icon className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-semibold">{stat.value}</div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <p className="mt-4 text-xs text-muted-foreground">
+        Remaining metrics populate as later milestones ship.
+      </p>
     </div>
   );
 }
