@@ -54,6 +54,68 @@ export async function sendWhatsAppMessage({
   return { ok: true, providerMessageId };
 }
 
+export async function sendWhatsAppTemplateMessage({
+  phoneNumberId,
+  accessToken,
+  to,
+  templateName,
+  languageCode,
+  parameters,
+}: {
+  phoneNumberId: string;
+  accessToken: string;
+  to: string;
+  templateName: string;
+  languageCode: string;
+  parameters: string[];
+}): Promise<SendMessageResult> {
+  const res = await fetch(
+    `https://graph.facebook.com/${GRAPH_API_VERSION}/${phoneNumberId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to,
+        type: "template",
+        template: {
+          name: templateName,
+          language: { code: languageCode },
+          ...(parameters.length > 0
+            ? {
+                components: [
+                  {
+                    type: "body",
+                    parameters: parameters.map((text) => ({ type: "text", text })),
+                  },
+                ],
+              }
+            : {}),
+        },
+      }),
+    }
+  );
+
+  const json = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: json?.error?.message ?? `WhatsApp API error (${res.status})`,
+    };
+  }
+
+  const providerMessageId = json?.messages?.[0]?.id;
+  if (!providerMessageId) {
+    return { ok: false, error: "WhatsApp API did not return a message id." };
+  }
+
+  return { ok: true, providerMessageId };
+}
+
 export type VerifyCredentialsResult =
   | { ok: true; displayNumber: string | null }
   | { ok: false; error: string };

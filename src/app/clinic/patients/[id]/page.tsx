@@ -12,7 +12,8 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PrescriptionStatusBadge } from "@/components/prescription-status-badge";
-import type { Conversation, Patient, Prescription } from "@/lib/types";
+import { SendTemplateDialog } from "@/components/clinic/send-template-dialog";
+import type { Conversation, Patient, Prescription, WhatsappTemplate } from "@/lib/types";
 
 export default async function ClinicPatientDetailPage({
   params,
@@ -43,6 +44,13 @@ export default async function ClinicPatientDetailPage({
     .order("created_at", { ascending: false })
     .returns<Prescription[]>();
 
+  const { data: approvedTemplates } = await supabase
+    .from("whatsapp_templates")
+    .select("*")
+    .eq("clinic_id", patient.clinic_id)
+    .eq("status", "approved")
+    .returns<WhatsappTemplate[]>();
+
   return (
     <div>
       <PageHeader title={patient.name} description="Patient profile." />
@@ -71,9 +79,13 @@ export default async function ClinicPatientDetailPage({
               Conversation History
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-wrap items-center gap-2">
             {conversation ? (
-              <Button size="sm" render={<Link href={`/clinic/inbox/${conversation.id}`} />}>
+              <Button
+                size="sm"
+                nativeButton={false}
+                render={<Link href={`/clinic/inbox/${conversation.id}`} />}
+              >
                 Open Conversation
               </Button>
             ) : (
@@ -81,6 +93,7 @@ export default async function ClinicPatientDetailPage({
                 No WhatsApp messages with this patient yet.
               </p>
             )}
+            <SendTemplateDialog patientId={id} templates={approvedTemplates ?? []} />
           </CardContent>
         </Card>
         <Card>
