@@ -286,6 +286,30 @@ async function main() {
     `rows=${bReadsAdminAProfile?.length}`
   );
 
+  // 11. A clinic_admin cannot self-promote to agency_admin via direct update.
+  console.log("Signing in as clinic staff test user...");
+  const clientStaff = await signIn(clinicStaff.email, clinicStaff.password);
+  const { error: escalateErr } = await clientStaff
+    .from("users")
+    .update({ role: "agency_admin" })
+    .eq("id", clinicStaff.id);
+  report(
+    "Clinic staff cannot self-promote their own role",
+    !!escalateErr,
+    escalateErr?.message
+  );
+
+  const { data: staffProfile } = await admin
+    .from("users")
+    .select("role")
+    .eq("id", clinicStaff.id)
+    .single();
+  report(
+    "Clinic staff role is still clinic_admin after the attempt",
+    staffProfile?.role === "clinic_admin",
+    `role=${staffProfile?.role}`
+  );
+
   console.log("\nCleaning up test users and clinics...");
   await cleanup();
 
