@@ -1,9 +1,11 @@
 import { notFound } from "next/navigation";
-import { Building2, MessageCircle } from "lucide-react";
+import Link from "next/link";
+import { Building2, MessageCircle, MessageSquareText } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { ConnectWhatsAppDialog } from "@/components/clinic/connect-whatsapp-dialog";
 import type { Clinic, Doctor } from "@/lib/types";
 
@@ -77,8 +79,18 @@ export default async function ClinicDetailPage({
                   : "—"
               }
             />
-            <div className="mt-2">
+            <div className="mt-2 flex flex-wrap gap-2">
               <ConnectWhatsAppDialog clinicId={clinic.id} />
+              {connected && (
+                <Button
+                  variant="outline"
+                  nativeButton={false}
+                  render={<Link href={`/agency/clinics/${clinic.id}/templates`} />}
+                >
+                  <MessageSquareText className="h-4 w-4" />
+                  Manage Templates
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>

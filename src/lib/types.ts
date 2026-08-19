@@ -104,3 +104,20 @@ export type PrescriptionMedicine = {
   needs_review: boolean;
   created_at: string;
 };
+
+export type WhatsappTemplateStatus = "pending" | "approved" | "rejected" | "disabled";
+export type WhatsappTemplateCategory = "utility" | "marketing" | "authentication";
+
+export type WhatsappTemplate = {
+  id: string;
+  clinic_id: string;
+  name: string;
+  category: WhatsappTemplateCategory;
+  language: string;
+  body_text: string;
+  meta_template_id: string | null;
+  status: WhatsappTemplateStatus;
+  rejection_reason: string | null;
+  created_by: string;
+  created_at: string;
+};

@@ -12,7 +12,9 @@ the milestone list and completion criteria.
 - Tailwind CSS + shadcn/ui
 - Supabase (Postgres, Auth, Storage)
 - Google Gemini (prescription extraction)
-- Twilio WhatsApp (production) / WhatsApp testing sandbox (development)
+- Meta WhatsApp Cloud API, connected directly per-clinic (Phone Number ID +
+  access token entered through the "Connect WhatsApp" UI, not Meta Embedded
+  Signup)
 
 ## Setup
 
@@ -29,7 +31,14 @@ the milestone list and completion criteria.
      (Supabase's newer publishable-key system; the publishable key is safe for the browser)
    - `SUPABASE_SECRET_KEY` — Project Settings → API (server-only; never expose to the browser,
      never prefix with `NEXT_PUBLIC_`, only import it from server-only code)
-   - `GEMINI_API_KEY`, `TWILIO_*`, `WHATSAPP_WEBHOOK_SECRET` — added as those milestones land
+   - `GEMINI_API_KEY` — [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+   - `WHATSAPP_WEBHOOK_SECRET` — any string you pick; it's the "Verify Token" you
+     set when registering the webhook URL in the Meta App dashboard
+   - `WHATSAPP_APP_SECRET` — optional in dev; the Meta App's secret, used to
+     verify incoming webhook signatures. Skipped (not enforced) if unset.
+   - Per-clinic WhatsApp credentials (Phone Number ID, WhatsApp Business Account
+     ID, access token) are entered through the app's "Connect WhatsApp" dialog,
+     not `.env` — see "WhatsApp connection" below.
 
 4. Apply database migrations: open the Supabase SQL Editor and run each file in
    `supabase/migrations/` in order (or use the Supabase CLI if you have it linked).
@@ -52,6 +61,25 @@ the milestone list and completion criteria.
 
    Sign in at `/login`. Agency admins land on `/agency/dashboard`; clinic users
    land on `/clinic/dashboard`.
+
+## WhatsApp connection
+
+Each clinic connects its own WhatsApp Cloud API test/business number from its
+detail page (`/agency/clinics/[id]` → "Connect WhatsApp"): Phone Number ID,
+WhatsApp Business Account ID, and access token, all verified against Meta
+before saving. The Meta App must be subscribed to that WhatsApp Business
+Account (`POST /{waba-id}/subscribed_apps` via
+[Graph API Explorer](https://developers.facebook.com/tools/explorer/)) or
+inbound webhooks silently never arrive even though the URL verifies fine.
+
+To receive real inbound messages locally, tunnel the dev server (`ngrok http
+3000`) and register `https://<tunnel>/api/webhooks/whatsapp` as the webhook
+Callback URL in the Meta App dashboard, with `WHATSAPP_WEBHOOK_SECRET` as the
+Verify Token, subscribed to the `messages` field.
+
+Outside the 24-hour customer-service window (i.e. the patient hasn't messaged
+recently), WhatsApp only allows sending pre-approved **template** messages —
+create these from the clinic's "Manage Templates" page once connected.
 
 ## Project structure
 

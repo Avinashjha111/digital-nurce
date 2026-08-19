@@ -35,9 +35,11 @@ export function ConnectWhatsAppDialog({ clinicId }: { clinicId: string }) {
         <DialogHeader>
           <DialogTitle>Connect WhatsApp</DialogTitle>
           <DialogDescription>
-            Enter the Phone Number ID and access token from your Meta WhatsApp
-            Cloud API test setup (developers.facebook.com). We verify them
-            with Meta before saving.
+            Enter the Phone Number ID, WhatsApp Business Account ID, and
+            access token from your Meta WhatsApp Cloud API test setup
+            (developers.facebook.com). We verify them with Meta before
+            saving. Reconnecting later (e.g. a new token) just overwrites
+            these.
           </DialogDescription>
         </DialogHeader>
 
@@ -52,6 +54,10 @@ export function ConnectWhatsAppDialog({ clinicId }: { clinicId: string }) {
             <div className="flex flex-col gap-2">
               <Label htmlFor="phone_number_id">Phone Number ID</Label>
               <Input id="phone_number_id" name="phone_number_id" required />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="waba_id">WhatsApp Business Account ID</Label>
+              <Input id="waba_id" name="waba_id" required />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="access_token">Access token</Label>
