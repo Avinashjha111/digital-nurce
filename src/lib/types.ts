@@ -63,3 +63,23 @@ export type Message = {
   status: MessageStatus;
   created_at: string;
 };
+
+export type PrescriptionStatus =
+  | "uploaded"
+  | "processing"
+  | "review_required"
+  | "approved"
+  | "rejected"
+  | "failed";
+
+export type Prescription = {
+  id: string;
+  clinic_id: string;
+  patient_id: string;
+  doctor_id: string;
+  file_path: string;
+  file_type: string;
+  status: PrescriptionStatus;
+  uploaded_by: string;
+  created_at: string;
+};

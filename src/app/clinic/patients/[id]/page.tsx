@@ -11,7 +11,8 @@ import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import type { Conversation, Patient } from "@/lib/types";
+import { PrescriptionStatusBadge } from "@/components/prescription-status-badge";
+import type { Conversation, Patient, Prescription } from "@/lib/types";
 
 export default async function ClinicPatientDetailPage({
   params,
@@ -34,6 +35,13 @@ export default async function ClinicPatientDetailPage({
     .select("*")
     .eq("patient_id", id)
     .maybeSingle<Conversation>();
+
+  const { data: prescriptions } = await supabase
+    .from("prescriptions")
+    .select("*")
+    .eq("patient_id", id)
+    .order("created_at", { ascending: false })
+    .returns<Prescription[]>();
 
   return (
     <div>
@@ -75,11 +83,37 @@ export default async function ClinicPatientDetailPage({
             )}
           </CardContent>
         </Card>
-        <StubSection
-          icon={FileText}
-          title="Prescriptions"
-          milestone="Uploaded prescriptions and AI extraction land in Milestones 5-7."
-        />
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <FileText className="h-4 w-4" />
+              Prescriptions
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!prescriptions || prescriptions.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No prescriptions uploaded yet.
+              </p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {prescriptions.map((prescription) => (
+                  <li key={prescription.id}>
+                    <Link
+                      href={`/clinic/prescriptions/${prescription.id}`}
+                      className="flex items-center justify-between gap-2 text-sm hover:underline"
+                    >
+                      <span>
+                        {new Date(prescription.created_at).toLocaleDateString()}
+                      </span>
+                      <PrescriptionStatusBadge status={prescription.status} />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
         <StubSection
           icon={Bell}
           title="Reminders"
