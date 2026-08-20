@@ -13,6 +13,8 @@ const sendSchema = z.object({
   body: z.string().trim().min(1, "Message cannot be empty"),
 });
 
+const SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 export async function sendMessage(
   conversationId: string,
   _prevState: SendMessageState,
@@ -54,6 +56,29 @@ export async function sendMessage(
 
   if (!patient) {
     return { error: "Patient not found." };
+  }
+
+  // Free-text replies only work within WhatsApp's 24h customer-service
+  // window (the UI already hides this form outside it -- this is the
+  // server-side backstop, since only the patient messaging in opens or
+  // extends the window, never an outbound send).
+  const { data: lastInbound } = await supabase
+    .from("messages")
+    .select("created_at")
+    .eq("conversation_id", conversationId)
+    .eq("direction", "inbound")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const windowOpen =
+    !!lastInbound && Date.now() - new Date(lastInbound.created_at).getTime() < SERVICE_WINDOW_MS;
+
+  if (!windowOpen) {
+    return {
+      error:
+        "The 24-hour service window is closed for this patient. Send an approved template instead.",
+    };
   }
 
   // Credentials live in a table with zero RLS policies -- only the

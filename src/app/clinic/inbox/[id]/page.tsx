@@ -3,10 +3,13 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { SendMessageForm } from "@/components/clinic/send-message-form";
+import { ServiceWindowLocked } from "@/components/clinic/service-window-locked";
 import { HumanAttentionToggle } from "@/components/clinic/human-attention-toggle";
 import { MarkRead } from "@/components/clinic/mark-read";
 import { Badge } from "@/components/ui/badge";
 import type { Conversation, Message, Patient } from "@/lib/types";
+
+const SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 const statusLabel: Record<Message["status"], string> = {
   queued: "Queued",
@@ -44,6 +47,17 @@ export default async function ConversationThreadPage({
     .eq("conversation_id", id)
     .order("created_at", { ascending: true })
     .returns<Message[]>();
+
+  // WhatsApp's 24h customer-service window: free-text replies are only
+  // allowed within 24h of the patient's most recent inbound message.
+  // Outbound sends (including templates) never open or extend it -- only
+  // the patient messaging in does.
+  const lastInboundAt = [...(messages ?? [])]
+    .reverse()
+    .find((m) => m.direction === "inbound")?.created_at;
+  const isWindowOpen = lastInboundAt
+    ? new Date().getTime() - new Date(lastInboundAt).getTime() < SERVICE_WINDOW_MS
+    : false;
 
   return (
     <>
@@ -101,7 +115,11 @@ export default async function ConversationThreadPage({
         )}
       </div>
 
-      <SendMessageForm conversationId={id} />
+      {isWindowOpen ? (
+        <SendMessageForm conversationId={id} />
+      ) : (
+        <ServiceWindowLocked patientId={conversation.patient_id} />
+      )}
     </>
   );
 }

@@ -14,8 +14,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Digital Nurse",
-  description: "Clinic patient communication and follow-up system.",
+  metadataBase: new URL("https://digitalnurse.in"),
+  title: {
+    default: "Digital Nurse — Digital Patient Follow-Up for Clinics",
+    template: "%s",
+  },
+  description:
+    "Digital Nurse helps clinics manage WhatsApp patient communication, prescription reminders and follow-ups with AI-assisted workflows and human approval.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
