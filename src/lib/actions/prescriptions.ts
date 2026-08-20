@@ -171,3 +171,138 @@ export async function processPrescription(
   revalidatePath("/clinic/prescriptions");
   return { error: null };
 }
+
+const reviewMedicineSchema = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().trim().min(1, "Every medicine needs a name."),
+  dosage: z.string().trim().optional().default(""),
+  frequency: z.string().trim().optional().default(""),
+  durationDays: z.number().int().positive().nullable(),
+  timings: z.string().trim().optional().default(""),
+  instruction: z.string().trim().optional().default(""),
+});
+
+const reviewSchema = z.object({
+  prescriptionId: z.string().uuid(),
+  decision: z.enum(["approved", "rejected"]),
+  patientName: z.string().trim(),
+  followUpRequired: z.boolean(),
+  followUpDaysAfter: z.number().int().positive().nullable(),
+  followUpInstruction: z.string().trim().optional().default(""),
+  medicines: z.array(reviewMedicineSchema),
+  removedMedicineIds: z.array(z.string().uuid()),
+});
+
+export type SubmitPrescriptionReviewInput = z.infer<typeof reviewSchema>;
+export type SubmitPrescriptionReviewResult = { error: string | null };
+
+// Milestone 7: human approve/edit/reject. This is the only path that can
+// move a prescription past 'review_required' -- reminders (Milestone 8) may
+// only be created from prescriptions with status 'approved'. Edits made
+// here (patient name, follow-up, medicines) overwrite the raw AI output and
+// clear every needs_review flag, since a human has now confirmed the value.
+export async function submitPrescriptionReview(
+  input: SubmitPrescriptionReviewInput
+): Promise<SubmitPrescriptionReviewResult> {
+  const profile = await getCurrentProfile();
+  if (
+    !profile ||
+    (profile.role !== "clinic_admin" && profile.role !== "receptionist") ||
+    !profile.clinic_id
+  ) {
+    return { error: "Only clinic staff can review prescriptions." };
+  }
+
+  const parsed = reviewSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const data = parsed.data;
+
+  if (data.decision === "approved") {
+    if (!data.patientName) {
+      return { error: "Patient name is required to approve." };
+    }
+    if (data.medicines.length === 0) {
+      return { error: "At least one medicine is required to approve." };
+    }
+  }
+
+  const supabase = await createClient();
+
+  // RLS-bound: only returns a row if this prescription belongs to the
+  // caller's own clinic.
+  const { data: prescription } = await supabase
+    .from("prescriptions")
+    .select("id, clinic_id, status")
+    .eq("id", data.prescriptionId)
+    .single();
+
+  if (!prescription) {
+    return { error: "Prescription not found." };
+  }
+  if (prescription.status !== "review_required") {
+    return { error: "This prescription is not awaiting review." };
+  }
+
+  if (data.removedMedicineIds.length > 0) {
+    const { error: deleteErr } = await supabase
+      .from("prescription_medicines")
+      .delete()
+      .eq("prescription_id", data.prescriptionId)
+      .in("id", data.removedMedicineIds);
+    if (deleteErr) return { error: deleteErr.message };
+  }
+
+  for (const medicine of data.medicines) {
+    const timings = medicine.timings
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    const payload = {
+      name: medicine.name,
+      dosage: medicine.dosage || null,
+      frequency: medicine.frequency || null,
+      duration_days: medicine.durationDays,
+      timings: timings.length > 0 ? timings : null,
+      instruction: medicine.instruction || null,
+      needs_review: false,
+    };
+
+    if (medicine.id) {
+      const { error: updateErr } = await supabase
+        .from("prescription_medicines")
+        .update(payload)
+        .eq("id", medicine.id)
+        .eq("prescription_id", data.prescriptionId);
+      if (updateErr) return { error: updateErr.message };
+    } else {
+      const { error: insertErr } = await supabase.from("prescription_medicines").insert({
+        ...payload,
+        prescription_id: data.prescriptionId,
+        clinic_id: prescription.clinic_id,
+      });
+      if (insertErr) return { error: insertErr.message };
+    }
+  }
+
+  const { error: updateErr } = await supabase
+    .from("prescriptions")
+    .update({
+      status: data.decision,
+      extracted_patient_name: data.patientName || null,
+      patient_name_needs_review: false,
+      follow_up_required: data.followUpRequired,
+      follow_up_days_after: data.followUpDaysAfter,
+      follow_up_instruction: data.followUpInstruction || null,
+      follow_up_needs_review: false,
+    })
+    .eq("id", data.prescriptionId);
+
+  if (updateErr) return { error: updateErr.message };
+
+  revalidatePath(`/clinic/prescriptions/${data.prescriptionId}`);
+  revalidatePath("/clinic/prescriptions");
+  return { error: null };
+}
