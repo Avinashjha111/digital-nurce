@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/layout/page-header";
@@ -53,7 +54,14 @@ export default async function AgencyPatientsPage() {
               <TableBody>
                 {patients.map((patient) => (
                   <TableRow key={patient.id}>
-                    <TableCell className="font-medium">{patient.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <Link
+                        href={`/agency/patients/${patient.id}`}
+                        className="hover:underline"
+                      >
+                        {patient.name}
+                      </Link>
+                    </TableCell>
                     <TableCell>{patient.clinics?.name ?? "—"}</TableCell>
                     <TableCell>+{patient.whatsapp_number}</TableCell>
                     <TableCell>

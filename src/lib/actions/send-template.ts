@@ -13,6 +13,11 @@ export type SendTemplateState = { error: string | null; success?: boolean };
 // one doesn't exist yet (unlike free-text replies, a template message can
 // be the very first outbound message -- that's the whole point of
 // templates: reaching a patient outside the 24h reply window).
+//
+// Agency-only: the agency manages template creation/approval already, and
+// now sends them too, on behalf of any clinic it owns -- clinic staff keep
+// read-only visibility in their inbox but no longer trigger sends
+// themselves.
 export async function sendTemplateMessage(
   patientId: string,
   templateId: string,
@@ -20,12 +25,8 @@ export async function sendTemplateMessage(
   formData: FormData
 ): Promise<SendTemplateState> {
   const profile = await getCurrentProfile();
-  if (
-    !profile ||
-    (profile.role !== "clinic_admin" && profile.role !== "receptionist") ||
-    !profile.clinic_id
-  ) {
-    return { error: "Only clinic staff can send messages." };
+  if (!profile || profile.role !== "agency_admin") {
+    return { error: "Only the managing agency can send template messages." };
   }
 
   const supabase = await createClient();
@@ -147,7 +148,8 @@ export async function sendTemplateMessage(
     .update({ last_message_at: new Date().toISOString() })
     .eq("id", conversationId);
 
-  revalidatePath(`/clinic/patients/${patientId}`);
+  revalidatePath(`/agency/patients/${patientId}`);
+  revalidatePath("/agency/conversations");
   revalidatePath(`/clinic/inbox/${conversationId}`);
   revalidatePath("/clinic/inbox");
 

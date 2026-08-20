@@ -58,8 +58,8 @@ export function SendTemplateDialog({
   if (templates.length === 0) {
     return (
       <p className="text-xs text-muted-foreground">
-        No approved templates yet -- create one from the clinic&apos;s Manage
-        Templates page.
+        No approved templates yet -- create one from this clinic&apos;s
+        Manage Templates page.
       </p>
     );
   }

@@ -13,17 +13,20 @@ const contactDetails = [
   {
     icon: Mail,
     label: "Business email",
-    value: "Add your business email here",
+    value: "info@digitalnurse.in",
+    placeholder: false,
   },
   {
     icon: MessageCircle,
     label: "WhatsApp contact",
-    value: "Add your WhatsApp business number here",
+    value: "9187641492",
+    placeholder: false,
   },
   {
     icon: MapPin,
     label: "Business location",
     value: "Add your business location here",
+    placeholder: true,
   },
 ];
 
@@ -42,7 +45,7 @@ export default function ContactPage() {
           </div>
 
           <div className="flex flex-col gap-4 lg:col-span-2">
-            {contactDetails.map(({ icon: Icon, label, value }) => (
+            {contactDetails.map(({ icon: Icon, label, value, placeholder }) => (
               <div
                 key={label}
                 className="flex items-start gap-3 rounded-xl border bg-card p-5"
@@ -50,7 +53,13 @@ export default function ContactPage() {
                 <Icon className="mt-0.5 size-5 shrink-0 text-primary" />
                 <div>
                   <p className="text-sm font-medium">{label}</p>
-                  <p className="text-sm text-muted-foreground italic">
+                  <p
+                    className={
+                      placeholder
+                        ? "text-sm text-muted-foreground italic"
+                        : "text-sm text-muted-foreground"
+                    }
+                  >
                     {value}
                   </p>
                 </div>

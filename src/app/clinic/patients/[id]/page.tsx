@@ -12,8 +12,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PrescriptionStatusBadge } from "@/components/prescription-status-badge";
-import { SendTemplateDialog } from "@/components/clinic/send-template-dialog";
-import type { Conversation, Patient, Prescription, WhatsappTemplate } from "@/lib/types";
+import type { Conversation, Patient, Prescription } from "@/lib/types";
 
 export default async function ClinicPatientDetailPage({
   params,
@@ -43,13 +42,6 @@ export default async function ClinicPatientDetailPage({
     .eq("patient_id", id)
     .order("created_at", { ascending: false })
     .returns<Prescription[]>();
-
-  const { data: approvedTemplates } = await supabase
-    .from("whatsapp_templates")
-    .select("*")
-    .eq("clinic_id", patient.clinic_id)
-    .eq("status", "approved")
-    .returns<WhatsappTemplate[]>();
 
   return (
     <div>
@@ -90,10 +82,10 @@ export default async function ClinicPatientDetailPage({
               </Button>
             ) : (
               <p className="text-sm text-muted-foreground">
-                No WhatsApp messages with this patient yet.
+                No WhatsApp messages with this patient yet. Your agency can
+                reach out with a template message to start one.
               </p>
             )}
-            <SendTemplateDialog patientId={id} templates={approvedTemplates ?? []} />
           </CardContent>
         </Card>
         <Card>
