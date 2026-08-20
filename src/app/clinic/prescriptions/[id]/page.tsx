@@ -4,9 +4,9 @@ import { AlertTriangle, FileText, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { PrescriptionStatusBadge } from "@/components/prescription-status-badge";
 import { RetryExtractionButton } from "@/components/clinic/retry-extraction-button";
+import { PrescriptionReviewForm } from "@/components/clinic/prescription-review-form";
 import type { Prescription, PrescriptionMedicine } from "@/lib/types";
 
 export default async function PrescriptionDetailPage({
@@ -107,6 +107,11 @@ export default async function PrescriptionDetailPage({
                 <p className="text-xs text-muted-foreground">{prescription.extraction_error}</p>
                 <RetryExtractionButton prescriptionId={id} />
               </div>
+            ) : prescription.status === "review_required" ? (
+              <PrescriptionReviewForm
+                prescription={prescription}
+                medicines={medicines ?? []}
+              />
             ) : (
               <>
                 <Row
@@ -114,7 +119,6 @@ export default async function PrescriptionDetailPage({
                   value={
                     <span className="flex items-center gap-1.5">
                       {prescription.extracted_patient_name ?? "—"}
-                      {prescription.patient_name_needs_review && <NeedsReview />}
                     </span>
                   }
                 />
@@ -127,10 +131,7 @@ export default async function PrescriptionDetailPage({
                     <div className="flex flex-col gap-3">
                       {medicines.map((medicine) => (
                         <div key={medicine.id} className="rounded-md border p-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-medium">{medicine.name}</span>
-                            {medicine.needs_review && <NeedsReview />}
-                          </div>
+                          <span className="font-medium">{medicine.name}</span>
                           <div className="mt-1 flex flex-col gap-0.5 text-xs text-muted-foreground">
                             {medicine.dosage && <span>Dosage: {medicine.dosage}</span>}
                             {medicine.frequency && <span>Frequency: {medicine.frequency}</span>}
@@ -151,13 +152,12 @@ export default async function PrescriptionDetailPage({
                 <div>
                   <p className="mb-2 font-medium">Follow-up</p>
                   <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1.5 text-sm text-foreground">
+                    <span className="text-sm text-foreground">
                       {prescription.follow_up_required === true
                         ? "Required"
                         : prescription.follow_up_required === false
                           ? "Not required"
                           : "Unclear"}
-                      {prescription.follow_up_needs_review && <NeedsReview />}
                     </span>
                     {prescription.follow_up_days_after != null && (
                       <span>{prescription.follow_up_days_after} day(s) after this visit</span>
@@ -168,10 +168,12 @@ export default async function PrescriptionDetailPage({
                   </div>
                 </div>
 
-                <p className="text-xs text-muted-foreground">
-                  Approve/Edit/Reject lands in Milestone 7. This is the raw AI
-                  extraction -- not yet safe to use for reminders.
-                </p>
+                {prescription.status === "rejected" && (
+                  <p className="text-xs text-muted-foreground">
+                    This prescription was rejected during review. It will not
+                    be used to create reminders.
+                  </p>
+                )}
               </>
             )}
           </CardContent>
@@ -187,14 +189,5 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
       <span className="text-muted-foreground">{label}</span>
       <span>{value}</span>
     </div>
-  );
-}
-
-function NeedsReview() {
-  return (
-    <Badge variant="outline" className="h-4 gap-1 px-1 text-[10px] text-amber-600">
-      <AlertTriangle className="h-2.5 w-2.5" />
-      Needs Review
-    </Badge>
   );
 }
