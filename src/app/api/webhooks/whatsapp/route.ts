@@ -156,6 +156,15 @@ export async function POST(request: NextRequest) {
           provider_message_id: msg.id ?? null,
           status: "delivered",
         });
+
+        // If this patient has a follow-up nudge awaiting a reply, this
+        // inbound message counts as them responding -- Milestone 9's
+        // "Contacted" status.
+        await admin
+          .from("follow_ups")
+          .update({ status: "contacted" })
+          .eq("patient_id", patientId)
+          .eq("status", "due");
       }
 
       for (const status of value?.statuses ?? []) {

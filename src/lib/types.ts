@@ -21,6 +21,7 @@ export type Clinic = {
   whatsapp_status: WhatsappStatus;
   whatsapp_last_checked_at: string | null;
   reminder_template_id: string | null;
+  follow_up_template_id: string | null;
   created_by: string;
   created_at: string;
 };
@@ -160,5 +161,41 @@ export type Reminder = {
   status: ReminderStatus;
   provider_message_id: string | null;
   error: string | null;
+  created_at: string;
+};
+
+export type FollowUpStatus =
+  | "upcoming"
+  | "due"
+  | "contacted"
+  | "appointment_requested"
+  | "completed"
+  | "overdue"
+  | "cancelled";
+
+export type FollowUp = {
+  id: string;
+  clinic_id: string;
+  patient_id: string;
+  doctor_id: string;
+  prescription_id: string;
+  follow_up_date: string;
+  status: FollowUpStatus;
+  message_sent_at: string | null;
+  provider_message_id: string | null;
+  error: string | null;
+  created_at: string;
+};
+
+export type AppointmentRequestStatus = "requested" | "confirmed" | "cancelled";
+
+export type AppointmentRequest = {
+  id: string;
+  clinic_id: string;
+  patient_id: string;
+  follow_up_id: string;
+  preferred_date: string;
+  preferred_time: string;
+  status: AppointmentRequestStatus;
   created_at: string;
 };

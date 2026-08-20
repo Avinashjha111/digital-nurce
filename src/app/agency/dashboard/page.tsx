@@ -1,4 +1,4 @@
-import { Building2, Users, FileText, Bell } from "lucide-react";
+import { Building2, Users, FileText, Bell, CalendarClock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,12 +19,17 @@ export default async function AgencyDashboardPage() {
     .from("reminders")
     .select("*", { count: "exact", head: true })
     .eq("status", "scheduled");
+  const { count: followUpCount } = await supabase
+    .from("follow_ups")
+    .select("*", { count: "exact", head: true })
+    .in("status", ["due", "contacted"]);
 
   const stats = [
     { label: "Total Clinics", value: clinicCount ?? 0, icon: Building2 },
     { label: "Total Patients", value: patientCount ?? 0, icon: Users },
     { label: "Prescriptions Awaiting Review", value: reviewCount ?? 0, icon: FileText },
     { label: "Active Reminders", value: reminderCount ?? 0, icon: Bell },
+    { label: "Follow-ups Due", value: followUpCount ?? 0, icon: CalendarClock },
   ];
 
   return (
@@ -33,7 +38,7 @@ export default async function AgencyDashboardPage() {
         title="Dashboard"
         description="Overview of clinics, patients, prescriptions and reminders."
       />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {stats.map((stat) => (
           <Card key={stat.label}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

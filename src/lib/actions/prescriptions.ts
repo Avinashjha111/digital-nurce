@@ -235,7 +235,7 @@ export async function submitPrescriptionReview(
   // caller's own clinic.
   const { data: prescription } = await supabase
     .from("prescriptions")
-    .select("id, clinic_id, patient_id, status")
+    .select("id, clinic_id, patient_id, doctor_id, status")
     .eq("id", data.prescriptionId)
     .single();
 
@@ -348,11 +348,27 @@ export async function submitPrescriptionReview(
       const { error: reminderErr } = await supabase.from("reminders").insert(reminderRows);
       if (reminderErr) return { error: reminderErr.message };
     }
+
+    if (data.followUpRequired && data.followUpDaysAfter) {
+      const followUpDate = new Date(now);
+      followUpDate.setUTCDate(followUpDate.getUTCDate() + data.followUpDaysAfter);
+
+      const { error: followUpErr } = await supabase.from("follow_ups").insert({
+        clinic_id: prescription.clinic_id,
+        patient_id: prescription.patient_id,
+        doctor_id: prescription.doctor_id,
+        prescription_id: data.prescriptionId,
+        follow_up_date: followUpDate.toISOString().slice(0, 10),
+      });
+      if (followUpErr) return { error: followUpErr.message };
+    }
   }
 
   revalidatePath(`/clinic/prescriptions/${data.prescriptionId}`);
   revalidatePath("/clinic/prescriptions");
   revalidatePath("/clinic/reminders");
   revalidatePath("/agency/reminders");
+  revalidatePath("/clinic/follow-ups");
+  revalidatePath("/agency/follow-ups");
   return { error: null };
 }

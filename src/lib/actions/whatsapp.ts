@@ -120,3 +120,29 @@ export async function setReminderTemplate(
   revalidatePath(`/agency/clinics/${clinicId}`);
   return { error: null };
 }
+
+export type SetFollowUpTemplateResult = { error: string | null };
+
+// Milestone 9: which approved template the scheduler sends the follow-up
+// nudge with, same reasoning as setReminderTemplate.
+export async function setFollowUpTemplate(
+  clinicId: string,
+  templateId: string | null
+): Promise<SetFollowUpTemplateResult> {
+  const profile = await getCurrentProfile();
+  if (!profile || profile.role !== "agency_admin") {
+    return { error: "Only agency admins can set the follow-up template." };
+  }
+
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("clinics")
+    .update({ follow_up_template_id: templateId })
+    .eq("id", clinicId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath(`/agency/clinics/${clinicId}`);
+  return { error: null };
+}

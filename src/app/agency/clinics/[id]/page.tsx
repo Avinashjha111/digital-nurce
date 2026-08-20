@@ -1,13 +1,14 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Bell, Building2, MessageCircle, MessageSquareText } from "lucide-react";
+import { Bell, Building2, CalendarClock, MessageCircle, MessageSquareText } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConnectWhatsAppDialog } from "@/components/clinic/connect-whatsapp-dialog";
-import { ReminderTemplateSelect } from "@/components/agency/reminder-template-select";
+import { TemplateAssignmentSelect } from "@/components/agency/template-assignment-select";
+import { setReminderTemplate, setFollowUpTemplate } from "@/lib/actions/whatsapp";
 import type { Clinic, Doctor, WhatsappTemplate } from "@/lib/types";
 
 export default async function ClinicDetailPage({
@@ -114,10 +115,32 @@ export default async function ClinicDetailPage({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ReminderTemplateSelect
+              <TemplateAssignmentSelect
                 clinicId={clinic.id}
                 templates={approvedTemplates ?? []}
                 value={clinic.reminder_template_id}
+                helpText="Medicine reminders are sent using this template. It must have exactly two body variables: patient name, then medicine."
+                action={setReminderTemplate}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {connected && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <CalendarClock className="h-4 w-4" />
+                Follow-up Template
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <TemplateAssignmentSelect
+                clinicId={clinic.id}
+                templates={approvedTemplates ?? []}
+                value={clinic.follow_up_template_id}
+                helpText="The follow-up nudge is sent using this template. It must have exactly one body variable: patient name."
+                action={setFollowUpTemplate}
               />
             </CardContent>
           </Card>
