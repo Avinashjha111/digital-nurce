@@ -91,3 +91,32 @@ export async function connectWhatsApp(
   revalidatePath(`/agency/clinics/${clinicId}`);
   return { error: null, success: true };
 }
+
+export type SetReminderTemplateResult = { error: string | null };
+
+// Milestone 8: which approved template the scheduler sends reminders
+// with. Reminders always go out as a template (they're business-initiated
+// on a schedule, not a reply, so they're outside WhatsApp's 24h free-text
+// window) -- the agency picks which one, same ownership as everything
+// else template-related.
+export async function setReminderTemplate(
+  clinicId: string,
+  templateId: string | null
+): Promise<SetReminderTemplateResult> {
+  const profile = await getCurrentProfile();
+  if (!profile || profile.role !== "agency_admin") {
+    return { error: "Only agency admins can set the reminder template." };
+  }
+
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("clinics")
+    .update({ reminder_template_id: templateId })
+    .eq("id", clinicId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath(`/agency/clinics/${clinicId}`);
+  return { error: null };
+}

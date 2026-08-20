@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/supabase/profile";
 import { aiService } from "@/lib/ai/aiService";
+import { buildReminderSchedule } from "@/lib/reminders/schedule";
 
 const schema = z.object({
   patient_id: z.string().uuid("Select a patient"),
@@ -234,7 +235,7 @@ export async function submitPrescriptionReview(
   // caller's own clinic.
   const { data: prescription } = await supabase
     .from("prescriptions")
-    .select("id, clinic_id, status")
+    .select("id, clinic_id, patient_id, status")
     .eq("id", data.prescriptionId)
     .single();
 
@@ -254,6 +255,15 @@ export async function submitPrescriptionReview(
     if (deleteErr) return { error: deleteErr.message };
   }
 
+  const savedMedicines: {
+    id: string;
+    name: string;
+    dosage: string | null;
+    instruction: string | null;
+    timings: string[] | null;
+    durationDays: number | null;
+  }[] = [];
+
   for (const medicine of data.medicines) {
     const timings = medicine.timings
       .split(",")
@@ -270,21 +280,39 @@ export async function submitPrescriptionReview(
       needs_review: false,
     };
 
-    if (medicine.id) {
+    let medicineId = medicine.id;
+
+    if (medicineId) {
       const { error: updateErr } = await supabase
         .from("prescription_medicines")
         .update(payload)
-        .eq("id", medicine.id)
+        .eq("id", medicineId)
         .eq("prescription_id", data.prescriptionId);
       if (updateErr) return { error: updateErr.message };
     } else {
-      const { error: insertErr } = await supabase.from("prescription_medicines").insert({
-        ...payload,
-        prescription_id: data.prescriptionId,
-        clinic_id: prescription.clinic_id,
-      });
-      if (insertErr) return { error: insertErr.message };
+      const { data: inserted, error: insertErr } = await supabase
+        .from("prescription_medicines")
+        .insert({
+          ...payload,
+          prescription_id: data.prescriptionId,
+          clinic_id: prescription.clinic_id,
+        })
+        .select("id")
+        .single();
+      if (insertErr || !inserted) {
+        return { error: insertErr?.message ?? "Failed to save medicine." };
+      }
+      medicineId = inserted.id;
     }
+
+    savedMedicines.push({
+      id: medicineId!,
+      name: payload.name,
+      dosage: payload.dosage,
+      instruction: payload.instruction,
+      timings: payload.timings,
+      durationDays: payload.duration_days,
+    });
   }
 
   const { error: updateErr } = await supabase
@@ -302,7 +330,29 @@ export async function submitPrescriptionReview(
 
   if (updateErr) return { error: updateErr.message };
 
+  if (data.decision === "approved") {
+    const now = new Date();
+    const reminderRows = savedMedicines.flatMap((medicine) =>
+      buildReminderSchedule(medicine.timings, medicine.durationDays, now).map(
+        (scheduledAt) => ({
+          clinic_id: prescription.clinic_id,
+          patient_id: prescription.patient_id,
+          prescription_id: data.prescriptionId,
+          medicine_id: medicine.id,
+          scheduled_at: scheduledAt.toISOString(),
+        })
+      )
+    );
+
+    if (reminderRows.length > 0) {
+      const { error: reminderErr } = await supabase.from("reminders").insert(reminderRows);
+      if (reminderErr) return { error: reminderErr.message };
+    }
+  }
+
   revalidatePath(`/clinic/prescriptions/${data.prescriptionId}`);
   revalidatePath("/clinic/prescriptions");
+  revalidatePath("/clinic/reminders");
+  revalidatePath("/agency/reminders");
   return { error: null };
 }

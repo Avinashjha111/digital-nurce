@@ -20,6 +20,7 @@ export type Clinic = {
   whatsapp_number: string | null;
   whatsapp_status: WhatsappStatus;
   whatsapp_last_checked_at: string | null;
+  reminder_template_id: string | null;
   created_by: string;
   created_at: string;
 };
@@ -137,5 +138,27 @@ export type WhatsappTemplate = {
   status: WhatsappTemplateStatus;
   rejection_reason: string | null;
   created_by: string;
+  created_at: string;
+};
+
+export type ReminderStatus =
+  | "scheduled"
+  | "processing"
+  | "sent"
+  | "delivered"
+  | "failed"
+  | "cancelled"
+  | "skipped";
+
+export type Reminder = {
+  id: string;
+  clinic_id: string;
+  patient_id: string;
+  prescription_id: string;
+  medicine_id: string;
+  scheduled_at: string;
+  status: ReminderStatus;
+  provider_message_id: string | null;
+  error: string | null;
   created_at: string;
 };

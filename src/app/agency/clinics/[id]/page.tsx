@@ -1,13 +1,14 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Building2, MessageCircle, MessageSquareText } from "lucide-react";
+import { Bell, Building2, MessageCircle, MessageSquareText } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConnectWhatsAppDialog } from "@/components/clinic/connect-whatsapp-dialog";
-import type { Clinic, Doctor } from "@/lib/types";
+import { ReminderTemplateSelect } from "@/components/agency/reminder-template-select";
+import type { Clinic, Doctor, WhatsappTemplate } from "@/lib/types";
 
 export default async function ClinicDetailPage({
   params,
@@ -32,6 +33,15 @@ export default async function ClinicDetailPage({
     .returns<Doctor[]>();
 
   const connected = clinic.whatsapp_status === "connected";
+
+  const { data: approvedTemplates } = connected
+    ? await supabase
+        .from("whatsapp_templates")
+        .select("*")
+        .eq("clinic_id", id)
+        .eq("status", "approved")
+        .returns<WhatsappTemplate[]>()
+    : { data: [] };
 
   return (
     <div>
@@ -94,6 +104,24 @@ export default async function ClinicDetailPage({
             </div>
           </CardContent>
         </Card>
+
+        {connected && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Bell className="h-4 w-4" />
+                Reminder Template
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ReminderTemplateSelect
+                clinicId={clinic.id}
+                templates={approvedTemplates ?? []}
+                value={clinic.reminder_template_id}
+              />
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );
