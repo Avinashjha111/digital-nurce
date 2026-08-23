@@ -2,6 +2,8 @@ import Link from "next/link";
 import { AlertCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
+import { WhatsAppAvatar } from "@/components/clinic/whatsapp-avatar";
+import { InboxShell } from "@/components/clinic/inbox-shell";
 import { cn } from "@/lib/utils";
 import type { Conversation, Message, Patient } from "@/lib/types";
 
@@ -42,9 +44,12 @@ export default async function ClinicInboxLayout({
 }) {
   const previews = await getConversationPreviews();
 
-  return (
-    <div className="flex h-[calc(100vh-8.5rem)] min-h-0 overflow-hidden rounded-lg border bg-background">
-      <aside className="flex w-full max-w-xs shrink-0 flex-col overflow-y-auto border-r">
+  const list = (
+    <>
+      <div className="shrink-0 border-b bg-background px-4 py-3">
+        <h1 className="text-base font-semibold">Chats</h1>
+      </div>
+      <div className="flex-1 overflow-y-auto">
         {previews.length === 0 ? (
           <p className="p-4 text-sm text-muted-foreground">
             No conversations yet. They appear here once a patient messages
@@ -55,43 +60,45 @@ export default async function ClinicInboxLayout({
             <Link
               key={conversation.id}
               href={`/clinic/inbox/${conversation.id}`}
-              className="flex flex-col gap-1 border-b px-4 py-3 hover:bg-muted/50"
+              className="flex items-center gap-3 border-b px-3 py-2.5 hover:bg-muted/50"
             >
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate font-medium">
-                  {conversation.patients?.name ?? "Unknown"}
-                </span>
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {new Date(conversation.last_message_at).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-sm text-muted-foreground">
-                  {lastMessage?.body ?? "—"}
-                </span>
-                <div className="flex shrink-0 items-center gap-1">
-                  {conversation.human_attention && (
-                    <AlertCircle className="h-3.5 w-3.5 text-destructive" />
-                  )}
-                  {conversation.unread_count > 0 && (
-                    <Badge
-                      className={cn(
-                        "h-5 min-w-5 justify-center rounded-full px-1.5"
-                      )}
-                    >
-                      {conversation.unread_count}
-                    </Badge>
-                  )}
+              <WhatsAppAvatar name={conversation.patients?.name ?? "?"} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate text-sm font-medium">
+                    {conversation.patients?.name ?? "Unknown"}
+                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {new Date(conversation.last_message_at).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate text-xs text-muted-foreground">
+                    {lastMessage?.body ?? "—"}
+                  </span>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {conversation.human_attention && (
+                      <AlertCircle className="h-3.5 w-3.5 text-destructive" />
+                    )}
+                    {conversation.unread_count > 0 && (
+                      <Badge
+                        className={cn("h-5 min-w-5 justify-center rounded-full px-1.5")}
+                      >
+                        {conversation.unread_count}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               </div>
             </Link>
           ))
         )}
-      </aside>
-      <div className="flex min-w-0 flex-1 flex-col">{children}</div>
-    </div>
+      </div>
+    </>
   );
+
+  return <InboxShell list={list} thread={children} />;
 }
