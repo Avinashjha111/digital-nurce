@@ -196,7 +196,7 @@ export default async function ClinicDashboardPage() {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           label="Today's Appointments"
           value={todaysAppointments?.length ?? 0}
@@ -238,7 +238,7 @@ export default async function ClinicDashboardPage() {
         />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="New WhatsApp Messages" value={unreadMessages} icon={MessageCircle} href="/clinic/inbox" cta="Open Inbox" />
         <KpiCard
           label="Appointment Requests"
@@ -309,7 +309,7 @@ export default async function ClinicDashboardPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <ChartCard
           title="Patient Follow-Up"
           data={chartData}

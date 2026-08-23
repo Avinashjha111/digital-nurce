@@ -35,6 +35,14 @@ function timeAgo(iso: string) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+type SendRow = { clinic: string; type: string; scheduled: number; sent: number; failed: number };
+
+function campaignStatusBadge(row: SendRow) {
+  if (row.failed > 0) return <StatusToneBadge tone="danger">{row.failed} Failed</StatusToneBadge>;
+  if (row.scheduled > 0) return <StatusToneBadge tone="action">Scheduled</StatusToneBadge>;
+  return <StatusToneBadge tone="success">Completed</StatusToneBadge>;
+}
+
 export default async function AgencyDashboardPage() {
   const supabase = await createClient();
 
@@ -117,7 +125,6 @@ export default async function AgencyDashboardPage() {
 
   // "Today's Campaigns" -- reminders + follow-up nudges are our real
   // equivalent of a broadcast campaign, grouped per clinic per type.
-  type SendRow = { clinic: string; type: string; scheduled: number; sent: number; failed: number };
   const sendRows: SendRow[] = [];
   const clinicNameById = new Map((clinics ?? []).map((c) => [c.id, c.name]));
 
@@ -245,7 +252,7 @@ export default async function AgencyDashboardPage() {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="Total Clinics" value={totalClinics} icon={Building2} href="/agency/clinics" cta="View Clinics" />
         <KpiCard
           label="Active Clinics"
@@ -270,7 +277,7 @@ export default async function AgencyDashboardPage() {
         <KpiCard label="Messages Today" value={todaysMessages?.length ?? 0} icon={MessageSquare} href="/agency/conversations" cta="View Messages" />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="Pending Reviews" value={pendingReviews} icon={FileText} href="/agency/prescriptions" cta="View" />
         <KpiCard label="Failed Messages" value={failedMessageCount ?? 0} icon={AlertCircle} href="/agency/conversations" cta="View" />
         <KpiCard label="Follow-Ups Due" value={followUpDueTotal} icon={CalendarClock} href="/agency/follow-ups" cta="View" />
@@ -285,38 +292,49 @@ export default async function AgencyDashboardPage() {
           {sendRows.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">No campaigns scheduled today.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-xs text-muted-foreground">
-                    <th className="py-2 pr-4 font-medium">Clinic</th>
-                    <th className="py-2 pr-4 font-medium">Campaign</th>
-                    <th className="py-2 pr-4 font-medium">Scheduled</th>
-                    <th className="py-2 pr-4 font-medium">Sent</th>
-                    <th className="py-2 font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sendRows.map((row, i) => (
-                    <tr key={i} className="border-b last:border-0">
-                      <td className="py-2.5 pr-4">{row.clinic}</td>
-                      <td className="py-2.5 pr-4">{row.type}</td>
-                      <td className="py-2.5 pr-4 tabular-nums">{row.scheduled}</td>
-                      <td className="py-2.5 pr-4 tabular-nums">{row.sent}</td>
-                      <td className="py-2.5">
-                        {row.failed > 0 ? (
-                          <StatusToneBadge tone="danger">{row.failed} Failed</StatusToneBadge>
-                        ) : row.scheduled > 0 ? (
-                          <StatusToneBadge tone="action">Scheduled</StatusToneBadge>
-                        ) : (
-                          <StatusToneBadge tone="success">Completed</StatusToneBadge>
-                        )}
-                      </td>
+            <>
+              {/* Mobile: card list (dashboard.md 30 -- tables become cards below sm). */}
+              <ul className="flex flex-col divide-y divide-border sm:hidden">
+                {sendRows.map((row, i) => (
+                  <li key={i} className="flex flex-col gap-1.5 py-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium">{row.clinic}</span>
+                      {campaignStatusBadge(row)}
+                    </div>
+                    <p className="text-xs text-muted-foreground">{row.type}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {row.scheduled} scheduled · {row.sent} sent
+                    </p>
+                  </li>
+                ))}
+              </ul>
+
+              {/* Desktop/tablet: table. */}
+              <div className="hidden overflow-x-auto sm:block">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-xs text-muted-foreground">
+                      <th className="py-2 pr-4 font-medium">Clinic</th>
+                      <th className="py-2 pr-4 font-medium">Campaign</th>
+                      <th className="py-2 pr-4 font-medium">Scheduled</th>
+                      <th className="py-2 pr-4 font-medium">Sent</th>
+                      <th className="py-2 font-medium">Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {sendRows.map((row, i) => (
+                      <tr key={i} className="border-b last:border-0">
+                        <td className="py-2.5 pr-4">{row.clinic}</td>
+                        <td className="py-2.5 pr-4">{row.type}</td>
+                        <td className="py-2.5 pr-4 tabular-nums">{row.scheduled}</td>
+                        <td className="py-2.5 pr-4 tabular-nums">{row.sent}</td>
+                        <td className="py-2.5">{campaignStatusBadge(row)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -348,7 +366,7 @@ export default async function AgencyDashboardPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <ChartCard
           title="Campaign Performance"
           data={chartData}
