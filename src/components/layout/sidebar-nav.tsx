@@ -27,7 +27,7 @@ export function SidebarNav({ items }: { items: NavItem[] }) {
             className={cn(
               "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
               active
-                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                ? "bg-sidebar-primary/15 font-semibold text-sidebar-primary"
                 : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             )}
           >
