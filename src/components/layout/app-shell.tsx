@@ -9,6 +9,8 @@ import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { SidebarWhatsAppStatus } from "@/components/layout/sidebar-whatsapp-status";
 import { agencyNavGroups, clinicNavGroups } from "@/components/layout/nav-items";
 import { LogoutButton } from "@/components/logout-button";
+import { InstallAppButton } from "@/components/pwa/install-app-button";
+import { InstallAppBanner } from "@/components/pwa/install-app-banner";
 
 export function AppShell({
   variant,
@@ -68,8 +70,9 @@ export function AppShell({
                 <div className="mt-6" onClick={() => setOpen(false)}>
                   <SidebarNav groups={navGroups} />
                 </div>
-                <div className="mt-4 px-1">
+                <div className="mt-4 flex flex-col gap-2 px-1">
                   <SidebarWhatsAppStatus connected={whatsapp.connected} total={whatsapp.total} mode={variant === "agency" ? "aggregate" : "single"} />
+                  {variant === "clinic" && <InstallAppButton className="w-full" />}
                 </div>
               </SheetContent>
             </Sheet>
@@ -80,10 +83,18 @@ export function AppShell({
             <span className="hidden text-sm text-muted-foreground sm:inline">
               {userLabel}
             </span>
+            {variant === "clinic" && <InstallAppButton />}
             <LogoutButton />
           </div>
         </header>
-        <main className="flex-1 bg-background p-4 md:p-6">{children}</main>
+        <main className="flex-1 bg-background p-4 md:p-6">
+          {variant === "clinic" && (
+            <div className="mb-4">
+              <InstallAppBanner />
+            </div>
+          )}
+          {children}
+        </main>
       </div>
     </div>
   );
