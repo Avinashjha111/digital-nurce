@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui/badge";
+import { StatusToneBadge, type StatusTone } from "@/components/status-tone-badge";
 import type { WhatsappTemplateStatus } from "@/lib/types";
 
 const labels: Record<WhatsappTemplateStatus, string> = {
@@ -8,24 +8,13 @@ const labels: Record<WhatsappTemplateStatus, string> = {
   disabled: "Disabled",
 };
 
-const variants: Record<WhatsappTemplateStatus, "default" | "secondary" | "destructive" | "outline"> = {
-  pending: "outline",
-  approved: "default",
-  rejected: "destructive",
-  disabled: "destructive",
+const tones: Record<WhatsappTemplateStatus, StatusTone> = {
+  pending: "warning",
+  approved: "success",
+  rejected: "danger",
+  disabled: "neutral",
 };
 
 export function TemplateStatusBadge({ status }: { status: WhatsappTemplateStatus }) {
-  return (
-    <Badge
-      variant={variants[status]}
-      className={
-        status === "pending"
-          ? "border-transparent bg-brand-coral-soft text-brand-coral-soft-foreground"
-          : undefined
-      }
-    >
-      {labels[status]}
-    </Badge>
-  );
+  return <StatusToneBadge tone={tones[status]}>{labels[status]}</StatusToneBadge>;
 }

@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui/badge";
+import { StatusToneBadge, type StatusTone } from "@/components/status-tone-badge";
 import type { FollowUpStatus } from "@/lib/types";
 
 const labels: Record<FollowUpStatus, string> = {
@@ -11,29 +11,16 @@ const labels: Record<FollowUpStatus, string> = {
   cancelled: "Cancelled",
 };
 
-const variants: Record<FollowUpStatus, "default" | "secondary" | "destructive" | "outline"> = {
-  upcoming: "secondary",
-  due: "outline",
-  contacted: "outline",
-  appointment_requested: "outline",
-  completed: "default",
-  overdue: "destructive",
-  cancelled: "outline",
+const tones: Record<FollowUpStatus, StatusTone> = {
+  upcoming: "neutral",
+  due: "action",
+  contacted: "info",
+  appointment_requested: "info",
+  completed: "success",
+  overdue: "danger",
+  cancelled: "neutral",
 };
 
-const coral: FollowUpStatus[] = ["due", "appointment_requested"];
-
 export function FollowUpStatusBadge({ status }: { status: FollowUpStatus }) {
-  return (
-    <Badge
-      variant={variants[status]}
-      className={
-        coral.includes(status)
-          ? "border-transparent bg-brand-coral-soft text-brand-coral-soft-foreground"
-          : undefined
-      }
-    >
-      {labels[status]}
-    </Badge>
-  );
+  return <StatusToneBadge tone={tones[status]}>{labels[status]}</StatusToneBadge>;
 }

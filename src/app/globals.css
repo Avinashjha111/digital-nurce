@@ -39,10 +39,22 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --color-brand-coral: var(--brand-coral);
-  --color-brand-coral-foreground: var(--brand-coral-foreground);
-  --color-brand-coral-soft: var(--brand-coral-soft);
-  --color-brand-coral-soft-foreground: var(--brand-coral-soft-foreground);
+  --color-status-success: var(--status-success);
+  --color-status-success-foreground: var(--status-success-foreground);
+  --color-status-success-soft: var(--status-success-soft);
+  --color-status-success-soft-foreground: var(--status-success-soft-foreground);
+  --color-status-warning: var(--status-warning);
+  --color-status-warning-foreground: var(--status-warning-foreground);
+  --color-status-warning-soft: var(--status-warning-soft);
+  --color-status-warning-soft-foreground: var(--status-warning-soft-foreground);
+  --color-status-info: var(--status-info);
+  --color-status-info-foreground: var(--status-info-foreground);
+  --color-status-info-soft: var(--status-info-soft);
+  --color-status-info-soft-foreground: var(--status-info-soft-foreground);
+  --color-status-action: var(--status-action);
+  --color-status-action-foreground: var(--status-action-foreground);
+  --color-status-action-soft: var(--status-action-soft);
+  --color-status-action-soft-foreground: var(--status-action-soft-foreground);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -52,81 +64,120 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+ * Dashboard palette (dashboard.md): soft-gray page, white cards, navy text,
+ * orange as the ONLY accent for primary actions/CTAs -- everything else
+ * stays neutral so orange keeps its meaning instead of becoming wallpaper.
+ * Status colors are semantic and reused everywhere a status appears
+ * (badges, KPI dots, activity feed) so meaning stays consistent app-wide.
+ */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.5 0.21 276);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.94 0.05 276);
-  --accent-foreground: oklch(0.32 0.15 276);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.5 0.21 276);
-  --chart-1: oklch(0.5 0.21 276);
-  --chart-2: oklch(0.62 0.19 35);
-  --chart-3: oklch(0.577 0.245 27.325);
-  --chart-4: oklch(0.556 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --background: #F8FAFC;
+  --foreground: #111827;
+  --card: #FFFFFF;
+  --card-foreground: #111827;
+  --popover: #FFFFFF;
+  --popover-foreground: #111827;
+  --primary: #F97316;
+  --primary-foreground: #FFFFFF;
+  --secondary: #F1F5F9;
+  --secondary-foreground: #111827;
+  --muted: #F1F5F9;
+  --muted-foreground: #64748B;
+  --accent: #F1F5F9;
+  --accent-foreground: #111827;
+  --destructive: #DC2626;
+  --border: #E5E7EB;
+  --input: #E5E7EB;
+  --ring: #F97316;
+  --chart-1: #F97316;
+  --chart-2: #2563EB;
+  --chart-3: #16A34A;
+  --chart-4: #64748B;
+  --chart-5: #94A3B8;
   --radius: 0.625rem;
-  --sidebar: oklch(0.99 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.5 0.21 276);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.94 0.05 276);
-  --sidebar-accent-foreground: oklch(0.32 0.15 276);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.5 0.21 276);
-  --brand-coral: oklch(0.62 0.19 35);
-  --brand-coral-foreground: oklch(0.99 0 0);
-  --brand-coral-soft: oklch(0.93 0.06 35);
-  --brand-coral-soft-foreground: oklch(0.4 0.16 35);
+  --sidebar: #111827;
+  --sidebar-foreground: #E5E7EB;
+  --sidebar-primary: #F97316;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #1F2937;
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: #1F2937;
+  --sidebar-ring: #F97316;
+
+  --status-success: #16A34A;
+  --status-success-foreground: #FFFFFF;
+  --status-success-soft: #DCFCE7;
+  --status-success-soft-foreground: #166534;
+
+  --status-warning: #F59E0B;
+  --status-warning-foreground: #FFFFFF;
+  --status-warning-soft: #FEF3C7;
+  --status-warning-soft-foreground: #92400E;
+
+  --status-info: #2563EB;
+  --status-info-foreground: #FFFFFF;
+  --status-info-soft: #DBEAFE;
+  --status-info-soft-foreground: #1D4ED8;
+
+  --status-action: #F97316;
+  --status-action-foreground: #FFFFFF;
+  --status-action-soft: #FFEDD5;
+  --status-action-soft-foreground: #C2410C;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.7 0.19 276);
-  --primary-foreground: oklch(0.145 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.32 0.09 276);
-  --accent-foreground: oklch(0.9 0.06 276);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.7 0.19 276);
-  --chart-1: oklch(0.7 0.19 276);
-  --chart-2: oklch(0.68 0.17 35);
-  --chart-3: oklch(0.704 0.191 22.216);
-  --chart-4: oklch(0.708 0 0);
-  --chart-5: oklch(0.439 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.7 0.19 276);
-  --sidebar-primary-foreground: oklch(0.145 0 0);
-  --sidebar-accent: oklch(0.32 0.09 276);
-  --sidebar-accent-foreground: oklch(0.9 0.06 276);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.7 0.19 276);
-  --brand-coral: oklch(0.68 0.17 35);
-  --brand-coral-foreground: oklch(0.145 0 0);
-  --brand-coral-soft: oklch(0.3 0.08 35);
-  --brand-coral-soft-foreground: oklch(0.88 0.06 35);
+  --background: #0B1220;
+  --foreground: #E5E7EB;
+  --card: #111827;
+  --card-foreground: #E5E7EB;
+  --popover: #111827;
+  --popover-foreground: #E5E7EB;
+  --primary: #FB923C;
+  --primary-foreground: #111827;
+  --secondary: #1F2937;
+  --secondary-foreground: #E5E7EB;
+  --muted: #1F2937;
+  --muted-foreground: #94A3B8;
+  --accent: #1F2937;
+  --accent-foreground: #E5E7EB;
+  --destructive: #F87171;
+  --border: color-mix(in oklch, #E5E7EB 12%, transparent);
+  --input: color-mix(in oklch, #E5E7EB 15%, transparent);
+  --ring: #FB923C;
+  --chart-1: #FB923C;
+  --chart-2: #60A5FA;
+  --chart-3: #4ADE80;
+  --chart-4: #94A3B8;
+  --chart-5: #64748B;
+  --sidebar: #0B1220;
+  --sidebar-foreground: #E5E7EB;
+  --sidebar-primary: #FB923C;
+  --sidebar-primary-foreground: #111827;
+  --sidebar-accent: #1F2937;
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: #1F2937;
+  --sidebar-ring: #FB923C;
+
+  --status-success: #4ADE80;
+  --status-success-foreground: #052E16;
+  --status-success-soft: #14532D;
+  --status-success-soft-foreground: #BBF7D0;
+
+  --status-warning: #FBBF24;
+  --status-warning-foreground: #451A03;
+  --status-warning-soft: #451A03;
+  --status-warning-soft-foreground: #FDE68A;
+
+  --status-info: #60A5FA;
+  --status-info-foreground: #0C1E3D;
+  --status-info-soft: #1E3A8A;
+  --status-info-soft-foreground: #BFDBFE;
+
+  --status-action: #FB923C;
+  --status-action-foreground: #431407;
+  --status-action-soft: #431407;
+  --status-action-soft-foreground: #FDBA74;
 }
 
 @layer base {

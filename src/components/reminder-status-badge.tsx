@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui/badge";
+import { StatusToneBadge, type StatusTone } from "@/components/status-tone-badge";
 import type { ReminderStatus } from "@/lib/types";
 
 const labels: Record<ReminderStatus, string> = {
@@ -11,27 +11,16 @@ const labels: Record<ReminderStatus, string> = {
   skipped: "Skipped",
 };
 
-const variants: Record<ReminderStatus, "default" | "secondary" | "destructive" | "outline"> = {
-  scheduled: "secondary",
-  processing: "outline",
-  sent: "default",
-  delivered: "default",
-  failed: "destructive",
-  cancelled: "outline",
-  skipped: "outline",
+const tones: Record<ReminderStatus, StatusTone> = {
+  scheduled: "action",
+  processing: "info",
+  sent: "success",
+  delivered: "success",
+  failed: "danger",
+  cancelled: "neutral",
+  skipped: "neutral",
 };
 
 export function ReminderStatusBadge({ status }: { status: ReminderStatus }) {
-  return (
-    <Badge
-      variant={variants[status]}
-      className={
-        status === "processing"
-          ? "border-transparent bg-brand-coral-soft text-brand-coral-soft-foreground"
-          : undefined
-      }
-    >
-      {labels[status]}
-    </Badge>
-  );
+  return <StatusToneBadge tone={tones[status]}>{labels[status]}</StatusToneBadge>;
 }
