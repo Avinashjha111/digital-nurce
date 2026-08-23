@@ -55,6 +55,9 @@ export const clinicNavGroups: NavGroup[] = [
     label: "Communication",
     items: [{ label: "Inbox", href: "/clinic/inbox", icon: Inbox }],
   },
+  {
+    items: [{ label: "Settings", href: "/clinic/settings", icon: Settings }],
+  },
 ];
 
 // Flat fallbacks, still exported in case anything imports the old shape.

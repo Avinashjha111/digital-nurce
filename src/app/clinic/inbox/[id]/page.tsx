@@ -4,13 +4,14 @@ import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { dateSeparatorLabel } from "@/lib/date-separator";
+import { chatThemeBackground } from "@/lib/chat-theme";
 import { SendMessageForm } from "@/components/clinic/send-message-form";
 import { ServiceWindowLocked } from "@/components/clinic/service-window-locked";
 import { HumanAttentionToggle } from "@/components/clinic/human-attention-toggle";
 import { MarkRead } from "@/components/clinic/mark-read";
 import { WhatsAppAvatar } from "@/components/clinic/whatsapp-avatar";
 import { MessageStatusTicks } from "@/components/clinic/message-status-ticks";
-import type { Conversation, Message, Patient } from "@/lib/types";
+import type { ClinicChatAppearance, Conversation, Message, Patient } from "@/lib/types";
 
 const SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
@@ -42,6 +43,21 @@ export default async function ConversationThreadPage({
     .eq("conversation_id", id)
     .order("created_at", { ascending: true })
     .returns<Message[]>();
+
+  const { data: appearance } = await supabase
+    .from("clinic_chat_appearance")
+    .select("*")
+    .eq("clinic_id", conversation.clinic_id)
+    .maybeSingle<ClinicChatAppearance>();
+
+  const wallpaperUrl = appearance?.wallpaper_url ?? null;
+  const chatBackgroundStyle = wallpaperUrl
+    ? {
+        backgroundImage: `linear-gradient(rgba(255,255,255,0.45), rgba(255,255,255,0.45)), url(${wallpaperUrl})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }
+    : { backgroundColor: chatThemeBackground(appearance?.theme) };
 
   // WhatsApp's 24h customer-service window: free-text replies are only
   // allowed within 24h of the patient's most recent inbound message.
@@ -82,8 +98,12 @@ export default async function ConversationThreadPage({
         <HumanAttentionToggle conversationId={id} active={conversation.human_attention} />
       </div>
 
-      {/* WhatsApp's characteristic pale chat background. */}
-      <div className="flex flex-1 flex-col gap-1 overflow-y-auto bg-[#E5DDD5] px-3 py-3 sm:px-6">
+      {/* Clinic-chosen theme color or custom wallpaper photo, like real
+          WhatsApp's own chat-background picker. */}
+      <div
+        className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-3 sm:px-6"
+        style={chatBackgroundStyle}
+      >
         {!messages || messages.length === 0 ? (
           <p className="mt-8 text-center text-sm text-muted-foreground">No messages yet.</p>
         ) : (

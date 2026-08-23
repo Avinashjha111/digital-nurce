@@ -21,8 +21,10 @@ export function HumanAttentionToggle({
       aria-label={active ? "Human attention required" : "Mark attention needed"}
       title={active ? "Human attention required" : "Mark attention needed"}
       className={cn(
-        "flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50",
-        active ? "bg-white text-red-600" : "text-white/80 hover:bg-white/10 hover:text-white"
+        "flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50",
+        active
+          ? "border-transparent bg-white text-red-600"
+          : "border-white/40 bg-white/10 text-white hover:bg-white/20"
       )}
       onClick={() =>
         startTransition(() => {

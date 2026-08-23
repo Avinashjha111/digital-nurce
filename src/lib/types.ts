@@ -99,6 +99,15 @@ export type Message = {
   created_at: string;
 };
 
+export type ChatTheme = "default" | "teal" | "sky" | "sand" | "mint";
+
+export type ClinicChatAppearance = {
+  clinic_id: string;
+  theme: ChatTheme;
+  wallpaper_url: string | null;
+  updated_at: string;
+};
+
 export type PrescriptionStatus =
   | "uploaded"
   | "processing"
