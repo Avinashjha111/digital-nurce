@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
-import { User, MessageSquare } from "lucide-react";
+import { User, MessageSquare, AlertTriangle } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SendTemplateDialog } from "@/components/agency/send-template-dialog";
+import { DeletePatientDialog } from "@/components/agency/delete-patient-dialog";
 import type { Conversation, Patient, WhatsappTemplate } from "@/lib/types";
 
 type PatientRow = Patient & { clinics: { name: string } | null };
@@ -76,6 +77,26 @@ export default async function AgencyPatientDetailPage({
                 : "No WhatsApp messages with this patient yet. A template can start the conversation."}
             </p>
             <SendTemplateDialog patientId={id} templates={approvedTemplates ?? []} />
+          </CardContent>
+        </Card>
+
+        <Card className="border-destructive/30 md:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base text-destructive">
+              <AlertTriangle className="h-4 w-4" />
+              Danger Zone
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              Permanently delete {patient.name} and all their conversations, prescriptions,
+              reminders and follow-ups. This cannot be undone.
+            </p>
+            <DeletePatientDialog
+              patientId={id}
+              patientName={patient.name}
+              redirectAfter="/agency/patients"
+            />
           </CardContent>
         </Card>
       </div>

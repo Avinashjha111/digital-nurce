@@ -60,3 +60,62 @@ export async function createPatient(
   revalidatePath("/clinic/patients");
   redirect(`/clinic/patients/${patient.id}`);
 }
+
+export type DeletePatientResult = { error: string | null };
+
+// Agency-only, permanent. Every table referencing patients (conversations,
+// messages, prescriptions, prescription_medicines, reminders, follow_ups,
+// appointment_requests) already cascades on delete, so removing the
+// patients row is enough to erase all of it -- storage files are cleaned
+// up separately first since Storage isn't covered by SQL cascades.
+export async function deletePatient(patientId: string): Promise<DeletePatientResult> {
+  const profile = await getCurrentProfile();
+  if (!profile || profile.role !== "agency_admin") {
+    return { error: "Only the managing agency can delete a patient." };
+  }
+
+  const supabase = await createClient();
+
+  // RLS-bound: only returns a row if this patient belongs to a clinic the
+  // caller's agency owns.
+  const { data: patient } = await supabase
+    .from("patients")
+    .select("id, clinic_id")
+    .eq("id", patientId)
+    .single();
+
+  if (!patient) {
+    return { error: "Patient not found." };
+  }
+
+  // Best-effort: prescription files live at {clinic_id}/{patient_id}/...
+  // in the private "prescriptions" bucket. A failure here shouldn't block
+  // removing the patient's data from every dashboard, so it's not fatal.
+  const folder = `${patient.clinic_id}/${patient.id}`;
+  const { data: files } = await supabase.storage.from("prescriptions").list(folder);
+  if (files && files.length > 0) {
+    await supabase.storage
+      .from("prescriptions")
+      .remove(files.map((f) => `${folder}/${f.name}`));
+  }
+
+  const { error } = await supabase.from("patients").delete().eq("id", patientId);
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/agency/patients");
+  revalidatePath("/agency/dashboard");
+  revalidatePath("/agency/prescriptions");
+  revalidatePath("/agency/reminders");
+  revalidatePath("/agency/follow-ups");
+  revalidatePath("/agency/conversations");
+  revalidatePath("/clinic/patients");
+  revalidatePath("/clinic/dashboard");
+  revalidatePath("/clinic/prescriptions");
+  revalidatePath("/clinic/reminders");
+  revalidatePath("/clinic/follow-ups");
+  revalidatePath("/clinic/inbox");
+
+  return { error: null };
+}

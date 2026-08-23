@@ -12,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { DeletePatientDialog } from "@/components/agency/delete-patient-dialog";
 
 type PatientRow = {
   id: string;
@@ -49,6 +50,7 @@ export default async function AgencyPatientsPage() {
                   <TableHead>Clinic</TableHead>
                   <TableHead>WhatsApp number</TableHead>
                   <TableHead>Added</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -66,6 +68,9 @@ export default async function AgencyPatientsPage() {
                     <TableCell>+{patient.whatsapp_number}</TableCell>
                     <TableCell>
                       {new Date(patient.created_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DeletePatientDialog patientId={patient.id} patientName={patient.name} />
                     </TableCell>
                   </TableRow>
                 ))}
