@@ -8,6 +8,7 @@ import { chatThemeBackground } from "@/lib/chat-theme";
 import { SendMessageForm } from "@/components/clinic/send-message-form";
 import { ServiceWindowLocked } from "@/components/clinic/service-window-locked";
 import { HumanAttentionToggle } from "@/components/clinic/human-attention-toggle";
+import { ChatAppearanceDialog } from "@/components/clinic/chat-appearance-dialog";
 import { MarkRead } from "@/components/clinic/mark-read";
 import { WhatsAppAvatar } from "@/components/clinic/whatsapp-avatar";
 import { MessageStatusTicks } from "@/components/clinic/message-status-ticks";
@@ -95,7 +96,14 @@ export default async function ConversationThreadPage({
           <WhatsAppAvatar name={patientName} tone="light" />
           <span className="truncate font-medium">{patientName}</span>
         </Link>
-        <HumanAttentionToggle conversationId={id} active={conversation.human_attention} />
+        <div className="flex shrink-0 items-center gap-1.5">
+          <HumanAttentionToggle conversationId={id} active={conversation.human_attention} />
+          <ChatAppearanceDialog
+            clinicId={conversation.clinic_id}
+            theme={appearance?.theme ?? "default"}
+            wallpaperUrl={wallpaperUrl}
+          />
+        </div>
       </div>
 
       {/* Clinic-chosen theme color or custom wallpaper photo, like real

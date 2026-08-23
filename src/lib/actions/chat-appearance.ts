@@ -29,8 +29,7 @@ export async function updateChatTheme(theme: ChatTheme) {
 
   if (error) return { error: error.message };
 
-  revalidatePath("/clinic/settings");
-  revalidatePath("/clinic/inbox");
+  revalidatePath("/clinic/inbox", "layout");
   return { error: null };
 }
 
@@ -48,8 +47,7 @@ export async function saveChatWallpaper(wallpaperUrl: string) {
 
   if (error) return { error: error.message };
 
-  revalidatePath("/clinic/settings");
-  revalidatePath("/clinic/inbox");
+  revalidatePath("/clinic/inbox", "layout");
   return { error: null };
 }
 
@@ -67,7 +65,6 @@ export async function removeChatWallpaper() {
 
   if (error) return { error: error.message };
 
-  revalidatePath("/clinic/settings");
-  revalidatePath("/clinic/inbox");
+  revalidatePath("/clinic/inbox", "layout");
   return { error: null };
 }
