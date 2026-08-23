@@ -22,6 +22,21 @@ export type Clinic = {
   whatsapp_last_checked_at: string | null;
   reminder_template_id: string | null;
   follow_up_template_id: string | null;
+  google_maps_link: string | null;
+  email: string | null;
+  opening_days: string[] | null;
+  opening_time: string | null;
+  closing_time: string | null;
+  break_start_time: string | null;
+  break_end_time: string | null;
+  weekly_off: string[] | null;
+  emergency_instructions: string | null;
+  appointment_process: string | null;
+  consultation_fee: number | null;
+  follow_up_fee: number | null;
+  payment_methods: string[] | null;
+  services: string[] | null;
+  departments: string[] | null;
   created_by: string;
   created_at: string;
 };
@@ -30,6 +45,24 @@ export type Doctor = {
   id: string;
   clinic_id: string;
   name: string;
+  specialization: string | null;
+  experience_years: number | null;
+  bio: string | null;
+  consultation_fee: number | null;
+  consultation_days: string[] | null;
+  morning_start: string | null;
+  morning_end: string | null;
+  evening_start: string | null;
+  evening_end: string | null;
+  services: string[] | null;
+  created_at: string;
+};
+
+export type ClinicFaq = {
+  id: string;
+  clinic_id: string;
+  question: string;
+  answer: string;
   created_at: string;
 };
 
