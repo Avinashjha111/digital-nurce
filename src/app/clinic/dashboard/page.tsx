@@ -1,4 +1,3 @@
-import Link from "next/link";
 import {
   AlertCircle,
   Bell,
@@ -19,6 +18,7 @@ import { ChartCard } from "@/components/chart-card";
 import { ActivityList, type ActivityItem } from "@/components/activity-list";
 import { QuickActions } from "@/components/quick-actions";
 import { StatusToneBadge } from "@/components/status-tone-badge";
+import { AttentionList } from "@/components/attention-list";
 import { ComingSoon } from "@/components/coming-soon";
 
 function greeting() {
@@ -287,25 +287,7 @@ export default async function ClinicDashboardPage() {
           <CardTitle className="text-base">Needs Your Attention</CardTitle>
         </CardHeader>
         <CardContent>
-          {attentionItems.length === 0 ? (
-            <p className="py-4 text-center text-sm text-muted-foreground">
-              Nothing needs attention. You&apos;re all caught up ✓
-            </p>
-          ) : (
-            <ul className="flex flex-col divide-y divide-border">
-              {attentionItems.map((item) => (
-                <li key={item.text} className="flex items-center justify-between gap-3 py-3">
-                  <div className="flex items-center gap-2">
-                    <StatusToneBadge tone={item.tone}>&nbsp;</StatusToneBadge>
-                    <span className="text-sm">{item.text}</span>
-                  </div>
-                  <Link href={item.href} className="text-sm font-medium text-primary hover:underline">
-                    {item.cta}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
+          <AttentionList items={attentionItems} />
         </CardContent>
       </Card>
 

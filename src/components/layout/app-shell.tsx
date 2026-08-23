@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
-import { agencyNavItems, clinicNavItems } from "@/components/layout/nav-items";
+import { SidebarWhatsAppStatus } from "@/components/layout/sidebar-whatsapp-status";
+import { agencyNavGroups, clinicNavGroups } from "@/components/layout/nav-items";
 import { LogoutButton } from "@/components/logout-button";
 
 export function AppShell({
@@ -14,34 +15,41 @@ export function AppShell({
   appName,
   badgeLabel,
   userLabel,
+  whatsapp,
   children,
 }: {
   variant: "agency" | "clinic";
   appName: string;
   badgeLabel: string;
   userLabel: string;
+  whatsapp: { connected: number; total: number };
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const navItems = variant === "agency" ? agencyNavItems : clinicNavItems;
+  const navGroups = variant === "agency" ? agencyNavGroups : clinicNavGroups;
 
   const brand = (
     <div className="flex items-center gap-2 px-2 py-1">
-      <Stethoscope className="h-5 w-5 text-sidebar-primary" />
-      <span className="font-semibold text-sidebar-foreground">{appName}</span>
+      <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary/15">
+        <Stethoscope className="h-4 w-4 text-sidebar-primary" />
+      </span>
+      <span className="text-[15px] font-semibold text-sidebar-foreground">{appName}</span>
     </div>
   );
 
   return (
     <div className="flex min-h-screen">
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar px-3 py-4 md:flex">
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar px-3 py-4 md:flex">
         {brand}
         <div className="mt-6 flex-1">
-          <SidebarNav items={navItems} />
+          <SidebarNav groups={navGroups} />
         </div>
-        <Badge variant="secondary" className="mx-2 w-fit">
-          {badgeLabel}
-        </Badge>
+        <div className="flex flex-col gap-2 px-1">
+          <SidebarWhatsAppStatus connected={whatsapp.connected} total={whatsapp.total} mode={variant === "agency" ? "aggregate" : "single"} />
+          <Badge variant="secondary" className="w-fit">
+            {badgeLabel}
+          </Badge>
+        </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -58,7 +66,10 @@ export function AppShell({
                 <SheetTitle className="sr-only">Navigation</SheetTitle>
                 {brand}
                 <div className="mt-6" onClick={() => setOpen(false)}>
-                  <SidebarNav items={navItems} />
+                  <SidebarNav groups={navGroups} />
+                </div>
+                <div className="mt-4 px-1">
+                  <SidebarWhatsAppStatus connected={whatsapp.connected} total={whatsapp.total} mode={variant === "agency" ? "aggregate" : "single"} />
                 </div>
               </SheetContent>
             </Sheet>
@@ -72,7 +83,7 @@ export function AppShell({
             <LogoutButton />
           </div>
         </header>
-        <main className="flex-1 bg-muted/20 p-4 md:p-6">{children}</main>
+        <main className="flex-1 bg-background p-4 md:p-6">{children}</main>
       </div>
     </div>
   );

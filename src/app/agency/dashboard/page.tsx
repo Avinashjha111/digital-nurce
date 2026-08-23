@@ -17,6 +17,7 @@ import { ChartCard } from "@/components/chart-card";
 import { ActivityList, type ActivityItem } from "@/components/activity-list";
 import { QuickActions } from "@/components/quick-actions";
 import { StatusToneBadge } from "@/components/status-tone-badge";
+import { AttentionList } from "@/components/attention-list";
 
 function greeting() {
   const hour = new Date().getHours();
@@ -290,7 +291,19 @@ export default async function AgencyDashboardPage() {
         </CardHeader>
         <CardContent>
           {sendRows.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">No campaigns scheduled today.</p>
+            <div className="flex flex-col items-center gap-2 py-8 text-center">
+              <span className="flex size-10 items-center justify-center rounded-full bg-status-action-soft">
+                <MessageSquare className="size-5 text-status-action" />
+              </span>
+              <p className="text-sm font-medium">No campaigns scheduled today</p>
+              <p className="max-w-xs text-xs text-muted-foreground">
+                Reminders and follow-up nudges appear here once a clinic approves a prescription
+                or a follow-up comes due.
+              </p>
+              <Link href="/agency/clinics" className="mt-1 text-xs font-medium text-primary hover:underline">
+                Set up a clinic&apos;s reminder template →
+              </Link>
+            </div>
           ) : (
             <>
               {/* Mobile: card list (dashboard.md 30 -- tables become cards below sm). */}
@@ -344,25 +357,7 @@ export default async function AgencyDashboardPage() {
           <CardTitle className="text-base">Needs Your Attention</CardTitle>
         </CardHeader>
         <CardContent>
-          {attentionItems.length === 0 ? (
-            <p className="py-4 text-center text-sm text-muted-foreground">
-              Nothing needs attention. You&apos;re all caught up ✓
-            </p>
-          ) : (
-            <ul className="flex flex-col divide-y divide-border">
-              {attentionItems.map((item) => (
-                <li key={item.text} className="flex items-center justify-between gap-3 py-3">
-                  <div className="flex items-center gap-2">
-                    <StatusToneBadge tone={item.tone}>&nbsp;</StatusToneBadge>
-                    <span className="text-sm">{item.text}</span>
-                  </div>
-                  <Link href={item.href} className="text-sm font-medium text-primary hover:underline">
-                    {item.cta}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
+          <AttentionList items={attentionItems} />
         </CardContent>
       </Card>
 
