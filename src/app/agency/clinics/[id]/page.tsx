@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Bell, Building2, CalendarClock, MessageCircle, MessageSquareText } from "lucide-react";
+import { Bell, Building2, CalendarClock, IndianRupee, MessageCircle, MessageSquareText } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,8 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConnectWhatsAppDialog } from "@/components/clinic/connect-whatsapp-dialog";
 import { TemplateAssignmentSelect } from "@/components/agency/template-assignment-select";
+import { SendPaymentLink } from "@/components/agency/send-payment-link";
 import { setReminderTemplate, setFollowUpTemplate } from "@/lib/actions/whatsapp";
-import type { Clinic, Doctor, WhatsappTemplate } from "@/lib/types";
+import { getClinicMessagingStatus } from "@/lib/billing";
+import type { Clinic, Doctor, Plan, TopUpPack, WhatsappTemplate } from "@/lib/types";
 
 export default async function ClinicDetailPage({
   params,
@@ -43,6 +45,12 @@ export default async function ClinicDetailPage({
         .eq("status", "approved")
         .returns<WhatsappTemplate[]>()
     : { data: [] };
+
+  const [billingStatus, { data: plans }, { data: topUpPacks }] = await Promise.all([
+    getClinicMessagingStatus(id),
+    supabase.from("plans").select("*").eq("is_active", true).order("price").returns<Plan[]>(),
+    supabase.from("top_up_packs").select("*").eq("is_active", true).order("price").returns<TopUpPack[]>(),
+  ]);
 
   return (
     <div>
@@ -145,6 +153,28 @@ export default async function ClinicDetailPage({
             </CardContent>
           </Card>
         )}
+
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <IndianRupee className="h-4 w-4" />
+              Billing
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              {billingStatus.canSend
+                ? `${billingStatus.messagesRemaining.toLocaleString("en-IN")} messages left, renews/expires ${new Date(billingStatus.expiryDate).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}.`
+                : billingStatus.reason === "no_plan"
+                  ? "No active plan yet."
+                  : billingStatus.reason === "expired"
+                    ? "Plan expired."
+                    : "Out of messages."}
+              {" "}Send a payment link below to activate or top up.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <SendPaymentLink clinicId={clinic.id} plans={plans ?? []} topUpPacks={topUpPacks ?? []} />
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

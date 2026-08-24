@@ -289,3 +289,21 @@ export type TopUpPurchase = {
   linked_subscription_id: string | null;
   created_by: string;
 };
+
+export type PaymentLinkKind = "plan" | "top_up";
+export type PaymentLinkStatus = "created" | "paid" | "expired" | "cancelled";
+
+export type PaymentLink = {
+  id: string;
+  clinic_id: string;
+  kind: PaymentLinkKind;
+  plan_id: string | null;
+  top_up_pack_id: string | null;
+  razorpay_payment_link_id: string;
+  short_url: string;
+  amount: number;
+  status: PaymentLinkStatus;
+  created_by: string;
+  created_at: string;
+  paid_at: string | null;
+};
