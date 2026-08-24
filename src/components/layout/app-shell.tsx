@@ -76,7 +76,7 @@ export function AppShell({
                 </div>
               </SheetContent>
             </Sheet>
-            <span className="font-semibold">{appName}</span>
+            <span className="truncate text-[15px] font-semibold">{appName}</span>
           </div>
           <div className="hidden md:block" />
           <div className="flex items-center gap-3">

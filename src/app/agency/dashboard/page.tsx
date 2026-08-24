@@ -247,7 +247,7 @@ export default async function AgencyDashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{greeting()}, Digital Nurse</h1>
+        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{greeting()}, Digital Nurse</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Here&apos;s what needs your attention today.
         </p>

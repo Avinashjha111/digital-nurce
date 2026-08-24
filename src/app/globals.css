@@ -189,5 +189,10 @@
   }
   html {
     @apply font-sans;
+    /* Stops Android Chrome from auto-boosting font sizes in narrow flex
+       containers (e.g. the mobile header), which otherwise renders text
+       much larger than its actual CSS size on phones. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 }

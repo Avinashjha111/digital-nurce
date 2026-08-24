@@ -187,7 +187,7 @@ export default async function ClinicDashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">
+        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
           {greeting()}
           {profile?.full_name ? `, ${profile.full_name}` : ""}
         </h1>
