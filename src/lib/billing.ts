@@ -77,3 +77,116 @@ export async function getClinicMessagingStatus(clinicId: string): Promise<Clinic
     expiryDate: subscription.expiry_date,
   };
 }
+
+export type ClinicUsageSummary = {
+  hasActivePlan: boolean;
+  planName: string | null;
+  messagesRemaining: number;
+  includedMessages: number;
+  expiryDate: string | null;
+  cycleStart: string | null;
+  breakdown: {
+    receivedFromPatients: number;
+    textRepliesSent: number;
+    mediaSent: number;
+    remindersSent: number;
+    followUpsSent: number;
+  };
+};
+
+/**
+ * Balance + "where did it go" breakdown for a clinic's current plan cycle
+ * (since the active subscription's start_date). Used by both the sidebar
+ * balance chip and the full Message Usage report page, clinic and agency
+ * side alike, so the two never disagree.
+ */
+export async function getClinicUsageSummary(clinicId: string): Promise<ClinicUsageSummary> {
+  const admin = createAdminClient();
+
+  const { data: subscription } = await admin
+    .from("clinic_subscriptions")
+    .select("start_date, expiry_date, messages_remaining, plans(name, included_messages)")
+    .eq("clinic_id", clinicId)
+    .eq("status", "active")
+    .maybeSingle();
+
+  const empty: ClinicUsageSummary = {
+    hasActivePlan: false,
+    planName: null,
+    messagesRemaining: 0,
+    includedMessages: 0,
+    expiryDate: null,
+    cycleStart: null,
+    breakdown: {
+      receivedFromPatients: 0,
+      textRepliesSent: 0,
+      mediaSent: 0,
+      remindersSent: 0,
+      followUpsSent: 0,
+    },
+  };
+
+  if (!subscription) return empty;
+
+  const plan = (
+    subscription as unknown as { plans: { name: string; included_messages: number } | null }
+  ).plans;
+  const cycleStart = subscription.start_date;
+
+  const [
+    { count: receivedFromPatients },
+    { count: textRepliesSent },
+    { count: mediaSent },
+    { count: remindersSent },
+    { count: followUpsSent },
+  ] = await Promise.all([
+    admin
+      .from("messages")
+      .select("*", { count: "exact", head: true })
+      .eq("clinic_id", clinicId)
+      .eq("direction", "inbound")
+      .gte("created_at", cycleStart),
+    admin
+      .from("messages")
+      .select("*", { count: "exact", head: true })
+      .eq("clinic_id", clinicId)
+      .eq("direction", "outbound")
+      .is("media_type", null)
+      .gte("created_at", cycleStart),
+    admin
+      .from("messages")
+      .select("*", { count: "exact", head: true })
+      .eq("clinic_id", clinicId)
+      .eq("direction", "outbound")
+      .not("media_type", "is", null)
+      .gte("created_at", cycleStart),
+    admin
+      .from("reminders")
+      .select("*", { count: "exact", head: true })
+      .eq("clinic_id", clinicId)
+      .in("status", ["sent", "delivered"])
+      .gte("scheduled_at", cycleStart),
+    admin
+      .from("follow_ups")
+      .select("*", { count: "exact", head: true })
+      .eq("clinic_id", clinicId)
+      .not("message_sent_at", "is", null)
+      .gte("message_sent_at", cycleStart),
+  ]);
+
+  return {
+    hasActivePlan: true,
+    planName: plan?.name ?? null,
+    messagesRemaining: subscription.messages_remaining,
+    includedMessages: plan?.included_messages ?? 0,
+    expiryDate: subscription.expiry_date,
+    cycleStart,
+    breakdown: {
+      receivedFromPatients: receivedFromPatients ?? 0,
+      textRepliesSent: textRepliesSent ?? 0,
+      mediaSent: mediaSent ?? 0,
+      remindersSent: remindersSent ?? 0,
+      followUpsSent: followUpsSent ?? 0,
+    },
+  };
+}

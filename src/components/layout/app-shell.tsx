@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 import { Badge } from "@/components/ui/badge";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { SidebarWhatsAppStatus } from "@/components/layout/sidebar-whatsapp-status";
+import { SidebarMessageBalance } from "@/components/layout/sidebar-message-balance";
 import { agencyNavGroups, clinicNavGroups } from "@/components/layout/nav-items";
 import { LogoutButton } from "@/components/logout-button";
 import { InstallAppButton } from "@/components/pwa/install-app-button";
@@ -22,6 +23,7 @@ export function AppShell({
   badgeLabel,
   userLabel,
   whatsapp,
+  messageBalance,
   children,
 }: {
   variant: "agency" | "clinic";
@@ -29,6 +31,11 @@ export function AppShell({
   badgeLabel: string;
   userLabel: string;
   whatsapp: { connected: number; total: number };
+  messageBalance?: {
+    hasActivePlan: boolean;
+    messagesRemaining: number;
+    includedMessages: number;
+  } | null;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -58,6 +65,13 @@ export function AppShell({
         </div>
         <div className="flex flex-col gap-2 px-1">
           <SidebarWhatsAppStatus connected={whatsapp.connected} total={whatsapp.total} mode={variant === "agency" ? "aggregate" : "single"} />
+          {variant === "clinic" && messageBalance && (
+            <SidebarMessageBalance
+              hasActivePlan={messageBalance.hasActivePlan}
+              messagesRemaining={messageBalance.messagesRemaining}
+              includedMessages={messageBalance.includedMessages}
+            />
+          )}
           <Badge variant="secondary" className="w-fit">
             {badgeLabel}
           </Badge>
@@ -87,6 +101,13 @@ export function AppShell({
                 </div>
                 <div className="mt-4 flex flex-col gap-2 px-1">
                   <SidebarWhatsAppStatus connected={whatsapp.connected} total={whatsapp.total} mode={variant === "agency" ? "aggregate" : "single"} />
+                  {variant === "clinic" && messageBalance && (
+                    <SidebarMessageBalance
+                      hasActivePlan={messageBalance.hasActivePlan}
+                      messagesRemaining={messageBalance.messagesRemaining}
+                      includedMessages={messageBalance.includedMessages}
+                    />
+                  )}
                   {variant === "clinic" && <InstallAppButton className="w-full" />}
                 </div>
               </SheetContent>

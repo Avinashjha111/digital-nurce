@@ -9,6 +9,7 @@ import {
   Settings,
   Inbox,
   IndianRupee,
+  MessageSquareText,
 } from "lucide-react";
 import type { NavItem } from "@/components/layout/sidebar-nav";
 
@@ -36,6 +37,7 @@ export const agencyNavGroups: NavGroup[] = [
   },
   {
     items: [
+      { label: "Message Usage", href: "/agency/usage", icon: MessageSquareText },
       { label: "Billing & Margins", href: "/agency/billing", icon: IndianRupee },
       { label: "Settings", href: "/agency/settings", icon: Settings },
     ],
@@ -57,7 +59,10 @@ export const clinicNavGroups: NavGroup[] = [
   },
   {
     label: "Communication",
-    items: [{ label: "Inbox", href: "/clinic/inbox", icon: Inbox }],
+    items: [
+      { label: "Inbox", href: "/clinic/inbox", icon: Inbox },
+      { label: "Message Usage", href: "/clinic/usage", icon: MessageSquareText },
+    ],
   },
 ];
 
