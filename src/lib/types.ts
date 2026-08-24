@@ -246,3 +246,46 @@ export type AppointmentRequest = {
   status: AppointmentRequestStatus;
   created_at: string;
 };
+
+export type Plan = {
+  id: string;
+  name: string;
+  price: number;
+  validity_days: number;
+  included_messages: number;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type TopUpPack = {
+  id: string;
+  name: string;
+  price: number;
+  messages: number;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type SubscriptionStatus = "active" | "expired";
+
+export type ClinicSubscription = {
+  id: string;
+  clinic_id: string;
+  plan_id: string;
+  start_date: string;
+  expiry_date: string;
+  messages_remaining: number;
+  status: SubscriptionStatus;
+  created_by: string;
+  created_at: string;
+};
+
+export type TopUpPurchase = {
+  id: string;
+  clinic_id: string;
+  pack_id: string;
+  messages_added: number;
+  purchased_at: string;
+  linked_subscription_id: string | null;
+  created_by: string;
+};
