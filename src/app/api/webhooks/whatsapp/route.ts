@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizePhone } from "@/lib/phone";
 import { downloadWhatsAppMedia } from "@/lib/whatsapp/provider";
 import { sendPushToClinic } from "@/lib/push";
+import { deductMessageUnits } from "@/lib/billing";
 
 const MEDIA_EXTENSION_BY_MIME: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -229,6 +230,12 @@ export async function POST(request: NextRequest) {
           provider_message_id: msg.id ?? null,
           status: "delivered",
         });
+
+        // pricing.md Section 1: inbound counts against the pool too --
+        // both directions cost real money via Twilio/Meta, and this must
+        // run even at 0 balance (inbound is still received/stored, just
+        // clamped at 0 rather than going negative).
+        await deductMessageUnits(clinicId);
 
         // If this patient has a follow-up nudge awaiting a reply, this
         // inbound message counts as them responding -- Milestone 9's

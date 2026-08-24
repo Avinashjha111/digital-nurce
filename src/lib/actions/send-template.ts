@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentProfile } from "@/lib/supabase/profile";
 import { sendWhatsAppTemplateMessage } from "@/lib/whatsapp/provider";
 import { extractPlaceholders } from "@/lib/whatsapp/templates";
+import { deductMessageUnits } from "@/lib/billing";
 
 export type SendTemplateState = { error: string | null; success?: boolean };
 
@@ -42,7 +43,7 @@ export async function sendTemplateMessage(
 
   const { data: template } = await supabase
     .from("whatsapp_templates")
-    .select("id, clinic_id, name, language, body_text, status, header_type, header_text")
+    .select("id, clinic_id, name, language, body_text, status, header_type, header_text, category")
     .eq("id", templateId)
     .single();
   if (!template) {
@@ -141,6 +142,13 @@ export async function sendTemplateMessage(
   });
   if (insertErr) {
     return { error: insertErr.message };
+  }
+
+  if (result.ok) {
+    await deductMessageUnits(
+      patient.clinic_id,
+      template.category === "marketing" ? "marketing_template" : "standard"
+    );
   }
 
   await supabase

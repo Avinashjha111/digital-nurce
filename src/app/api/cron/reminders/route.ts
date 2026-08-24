@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendWhatsAppTemplateMessage } from "@/lib/whatsapp/provider";
 import { extractPlaceholders } from "@/lib/whatsapp/templates";
+import { deductMessageUnits } from "@/lib/billing";
 
 export const dynamic = "force-dynamic";
 
@@ -79,7 +80,7 @@ export async function GET(request: NextRequest) {
     templateIds.length > 0
       ? await admin
           .from("whatsapp_templates")
-          .select("id, name, language, body_text, header_type, header_text, status")
+          .select("id, name, language, body_text, header_type, header_text, status, category")
           .in("id", templateIds)
       : { data: [] };
 
@@ -127,6 +128,7 @@ async function sendOne(
       header_type: string;
       header_text: string | null;
       status: string;
+      category: string;
     }
   >
 ): Promise<{ ok: true; providerMessageId: string | null } | { ok: false; error: string }> {
@@ -197,5 +199,11 @@ async function sendOne(
   if (!result.ok) {
     return { ok: false, error: result.error };
   }
+
+  await deductMessageUnits(
+    reminder.clinic_id,
+    template.category === "marketing" ? "marketing_template" : "standard"
+  );
+
   return { ok: true, providerMessageId: result.providerMessageId };
 }

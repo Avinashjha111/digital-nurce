@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentProfile } from "@/lib/supabase/profile";
 import { sendWhatsAppMessage, sendWhatsAppMediaMessage } from "@/lib/whatsapp/provider";
+import { deductMessageUnits } from "@/lib/billing";
 import type { MediaType } from "@/lib/types";
 
 export type SendMessageState = { error: string | null };
@@ -114,6 +115,10 @@ export async function sendMessage(
 
   if (insertErr) {
     return { error: insertErr.message };
+  }
+
+  if (result.ok) {
+    await deductMessageUnits(conversation.clinic_id);
   }
 
   await supabase
@@ -227,6 +232,10 @@ export async function sendMediaMessage(
 
   if (insertErr) {
     return { error: insertErr.message };
+  }
+
+  if (result.ok) {
+    await deductMessageUnits(conversation.clinic_id);
   }
 
   await supabase
