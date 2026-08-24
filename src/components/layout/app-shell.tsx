@@ -13,6 +13,7 @@ import { agencyNavGroups, clinicNavGroups } from "@/components/layout/nav-items"
 import { LogoutButton } from "@/components/logout-button";
 import { InstallAppButton } from "@/components/pwa/install-app-button";
 import { InstallAppBanner } from "@/components/pwa/install-app-banner";
+import { NotificationPermissionBanner } from "@/components/pwa/notification-permission-banner";
 import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
 
 export function AppShell({
@@ -110,8 +111,9 @@ export function AppShell({
           )}
         >
           {variant === "clinic" && !isMobileInbox && (
-            <div className="mb-4">
+            <div className="mb-4 flex flex-col gap-2">
               <InstallAppBanner />
+              <NotificationPermissionBanner />
             </div>
           )}
           {children}

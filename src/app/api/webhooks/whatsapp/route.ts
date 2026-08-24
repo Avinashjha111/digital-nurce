@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizePhone } from "@/lib/phone";
 import { downloadWhatsAppMedia } from "@/lib/whatsapp/provider";
+import { sendPushToClinic } from "@/lib/push";
 
 const MEDIA_EXTENSION_BY_MIME: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -103,23 +104,25 @@ export async function POST(request: NextRequest) {
 
         const { data: existingPatient } = await admin
           .from("patients")
-          .select("id")
+          .select("id, name")
           .eq("clinic_id", clinicId)
           .eq("whatsapp_number", from)
           .maybeSingle();
 
         let patientId = existingPatient?.id as string | undefined;
+        let patientName = existingPatient?.name as string | undefined;
 
         if (!patientId) {
           const contactName = value?.contacts?.find(
             (c) => normalizePhone(c.wa_id ?? "") === from
           )?.profile?.name;
+          patientName = contactName || `WhatsApp ${from}`;
 
           const { data: newPatient, error: patientErr } = await admin
             .from("patients")
             .insert({
               clinic_id: clinicId,
-              name: contactName || `WhatsApp ${from}`,
+              name: patientName,
               whatsapp_number: from,
             })
             .select("id")
@@ -235,6 +238,18 @@ export async function POST(request: NextRequest) {
           .update({ status: "contacted" })
           .eq("patient_id", patientId)
           .eq("status", "due");
+
+        const notificationBody = mediaType
+          ? { image: "📷 Photo", document: "📄 Document", video: "🎥 Video", audio: "🎵 Audio" }[
+              mediaType
+            ]
+          : body || "New message";
+
+        await sendPushToClinic(clinicId, {
+          title: patientName ?? "New WhatsApp message",
+          body: notificationBody,
+          url: `/clinic/inbox/${conversationId}`,
+        });
       }
 
       for (const status of value?.statuses ?? []) {
