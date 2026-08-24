@@ -35,8 +35,8 @@ export function SidebarNav({ groups }: { groups: NavGroup[] }) {
                 className={cn(
                   "flex items-center gap-2.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors",
                   active
-                    ? "bg-sidebar-primary/15 font-semibold text-sidebar-primary"
-                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    ? "bg-sidebar-primary font-semibold text-sidebar-primary-foreground shadow-sm"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                 )}
               >
                 <Icon className="h-4 w-4 shrink-0" />
