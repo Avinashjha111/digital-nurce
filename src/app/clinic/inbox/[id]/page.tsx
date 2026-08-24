@@ -12,6 +12,7 @@ import { ChatAppearanceDialog } from "@/components/clinic/chat-appearance-dialog
 import { MarkRead } from "@/components/clinic/mark-read";
 import { WhatsAppAvatar } from "@/components/clinic/whatsapp-avatar";
 import { MessageStatusTicks } from "@/components/clinic/message-status-ticks";
+import { MessageMedia } from "@/components/clinic/message-media";
 import type { ClinicChatAppearance, Conversation, Message, Patient } from "@/lib/types";
 
 const SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -143,7 +144,16 @@ export default async function ConversationThreadPage({
                         : "rounded-tl-none bg-white"
                     )}
                   >
-                    <p className="text-sm break-words text-[#111B21]">{message.body}</p>
+                    {message.media_url && message.media_type && (
+                      <MessageMedia
+                        mediaUrl={message.media_url}
+                        mediaType={message.media_type}
+                        mediaFilename={message.media_filename}
+                      />
+                    )}
+                    {message.body && (
+                      <p className="text-sm break-words text-[#111B21]">{message.body}</p>
+                    )}
                     <div className="flex items-center justify-end gap-1 self-end">
                       <span className="text-[10px] text-black/45">
                         {new Date(message.created_at).toLocaleTimeString([], {
@@ -164,7 +174,7 @@ export default async function ConversationThreadPage({
       </div>
 
       {isWindowOpen ? (
-        <SendMessageForm conversationId={id} />
+        <SendMessageForm conversationId={id} clinicId={conversation.clinic_id} />
       ) : (
         <ServiceWindowLocked patientId={conversation.patient_id} />
       )}

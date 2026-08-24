@@ -9,6 +9,16 @@ import type { Conversation, Message, Patient } from "@/lib/types";
 
 type ConversationRow = Conversation & { patients: Pick<Patient, "name"> | null };
 
+function lastMessagePreview(message: Pick<Message, "body" | "media_type"> | null) {
+  if (!message) return "—";
+  if (message.media_type === "image") return message.body ? `📷 ${message.body}` : "📷 Photo";
+  if (message.media_type === "document")
+    return message.body ? `📄 ${message.body}` : "📄 Document";
+  if (message.media_type === "video") return message.body ? `🎥 ${message.body}` : "🎥 Video";
+  if (message.media_type === "audio") return "🎵 Audio";
+  return message.body || "—";
+}
+
 async function getConversationPreviews() {
   const supabase = await createClient();
 
@@ -24,11 +34,11 @@ async function getConversationPreviews() {
     conversations.map(async (conversation) => {
       const { data: lastMessage } = await supabase
         .from("messages")
-        .select("body, created_at")
+        .select("body, media_type, created_at")
         .eq("conversation_id", conversation.id)
         .order("created_at", { ascending: false })
         .limit(1)
-        .maybeSingle<Pick<Message, "body" | "created_at">>();
+        .maybeSingle<Pick<Message, "body" | "media_type" | "created_at">>();
 
       return { conversation, lastMessage };
     })
@@ -77,7 +87,7 @@ export default async function ClinicInboxLayout({
                 </div>
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate text-xs text-muted-foreground">
-                    {lastMessage?.body ?? "—"}
+                    {lastMessagePreview(lastMessage ?? null)}
                   </span>
                   <div className="flex shrink-0 items-center gap-1">
                     {conversation.human_attention && (

@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizePhone } from "@/lib/phone";
+import { downloadWhatsAppMedia } from "@/lib/whatsapp/provider";
+
+const MEDIA_EXTENSION_BY_MIME: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "application/pdf": "pdf",
+};
 
 // Meta sends messages AND delivery/read statuses to this same URL (unlike
 // Twilio's separate status-callback endpoint), so both are handled here.
@@ -17,6 +25,10 @@ type MetaWebhookPayload = {
           id?: string;
           type?: string;
           text?: { body?: string };
+          image?: { id?: string; caption?: string; mime_type?: string };
+          document?: { id?: string; caption?: string; filename?: string; mime_type?: string };
+          video?: { id?: string; caption?: string; mime_type?: string };
+          audio?: { id?: string; mime_type?: string };
         }>;
         statuses?: Array<{ id?: string; status?: string }>;
       };
@@ -78,7 +90,7 @@ export async function POST(request: NextRequest) {
 
       const { data: credential } = await admin
         .from("whatsapp_credentials")
-        .select("clinic_id")
+        .select("clinic_id, access_token")
         .eq("phone_number_id", phoneNumberId)
         .maybeSingle();
 
@@ -144,8 +156,63 @@ export async function POST(request: NextRequest) {
           conversationId = newConversation.id;
         }
 
-        const body =
-          msg.text?.body ?? (msg.type ? `[${msg.type} message]` : "[unsupported message]");
+        let body = msg.text?.body ?? "";
+        let mediaUrl: string | null = null;
+        let mediaType: "image" | "document" | "video" | "audio" | null = null;
+        let mediaFilename: string | null = null;
+
+        const inboundMedia =
+          msg.type === "image"
+            ? { id: msg.image?.id, type: "image" as const, caption: msg.image?.caption }
+            : msg.type === "document"
+              ? {
+                  id: msg.document?.id,
+                  type: "document" as const,
+                  caption: msg.document?.caption,
+                  filename: msg.document?.filename,
+                }
+              : msg.type === "video"
+                ? { id: msg.video?.id, type: "video" as const, caption: msg.video?.caption }
+                : msg.type === "audio"
+                  ? { id: msg.audio?.id, type: "audio" as const }
+                  : null;
+
+        if (inboundMedia?.id) {
+          body = inboundMedia.caption ?? "";
+          const downloaded = await downloadWhatsAppMedia({
+            mediaId: inboundMedia.id,
+            accessToken: credential.access_token,
+          });
+
+          if (downloaded) {
+            const ext =
+              MEDIA_EXTENSION_BY_MIME[downloaded.mimeType] ??
+              downloaded.mimeType.split("/")[1] ??
+              "bin";
+            const filename =
+              "filename" in inboundMedia && inboundMedia.filename
+                ? inboundMedia.filename
+                : `${inboundMedia.type}-${Date.now()}.${ext}`;
+            const path = `${clinicId}/inbound/${Date.now()}-${filename}`;
+
+            const { error: uploadErr } = await admin.storage
+              .from("chat-media")
+              .upload(path, downloaded.bytes, { contentType: downloaded.mimeType });
+
+            if (!uploadErr) {
+              const { data: publicUrl } = admin.storage.from("chat-media").getPublicUrl(path);
+              mediaUrl = publicUrl.publicUrl;
+              mediaType = inboundMedia.type;
+              mediaFilename = filename;
+            }
+          }
+
+          if (!mediaUrl) {
+            body = body || `[${inboundMedia.type} message -- could not be downloaded]`;
+          }
+        } else if (!body && msg.type) {
+          body = `[${msg.type} message]`;
+        }
 
         await admin.from("messages").insert({
           conversation_id: conversationId,
@@ -153,6 +220,9 @@ export async function POST(request: NextRequest) {
           patient_id: patientId,
           direction: "inbound",
           body,
+          media_url: mediaUrl,
+          media_type: mediaType,
+          media_filename: mediaFilename,
           provider_message_id: msg.id ?? null,
           status: "delivered",
         });

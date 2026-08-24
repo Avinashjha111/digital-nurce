@@ -132,6 +132,88 @@ export async function sendWhatsAppTemplateMessage({
   return { ok: true, providerMessageId };
 }
 
+export async function sendWhatsAppMediaMessage({
+  phoneNumberId,
+  accessToken,
+  to,
+  mediaType,
+  mediaUrl,
+  caption,
+  filename,
+}: {
+  phoneNumberId: string;
+  accessToken: string;
+  to: string;
+  mediaType: "image" | "document" | "video" | "audio";
+  mediaUrl: string;
+  caption?: string;
+  filename?: string;
+}): Promise<SendMessageResult> {
+  const mediaObject: Record<string, string> = { link: mediaUrl };
+  if (caption) mediaObject.caption = caption;
+  if (mediaType === "document" && filename) mediaObject.filename = filename;
+
+  const res = await fetch(
+    `https://graph.facebook.com/${GRAPH_API_VERSION}/${phoneNumberId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to,
+        type: mediaType,
+        [mediaType]: mediaObject,
+      }),
+    }
+  );
+
+  const json = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: metaErrorMessage(json, `WhatsApp API error (${res.status})`),
+    };
+  }
+
+  const providerMessageId = json?.messages?.[0]?.id;
+  if (!providerMessageId) {
+    return { ok: false, error: "WhatsApp API did not return a message id." };
+  }
+
+  return { ok: true, providerMessageId };
+}
+
+// Inbound media only ever arrives from Meta as a media ID -- fetching it
+// is a two-step dance: ask the Graph API for a short-lived download URL,
+// then fetch that URL (still bearer-authed) for the actual bytes.
+export async function downloadWhatsAppMedia({
+  mediaId,
+  accessToken,
+}: {
+  mediaId: string;
+  accessToken: string;
+}): Promise<{ bytes: ArrayBuffer; mimeType: string } | null> {
+  const metaRes = await fetch(`https://graph.facebook.com/${GRAPH_API_VERSION}/${mediaId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const meta = await metaRes.json().catch(() => null);
+  if (!metaRes.ok || !meta?.url) return null;
+
+  const fileRes = await fetch(meta.url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!fileRes.ok) return null;
+
+  return {
+    bytes: await fileRes.arrayBuffer(),
+    mimeType: meta.mime_type ?? "application/octet-stream",
+  };
+}
+
 export type VerifyCredentialsResult =
   | { ok: true; displayNumber: string | null }
   | { ok: false; error: string };

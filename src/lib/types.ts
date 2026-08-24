@@ -87,6 +87,8 @@ export type Conversation = {
 export type MessageDirection = "inbound" | "outbound";
 export type MessageStatus = "queued" | "sent" | "delivered" | "read" | "failed";
 
+export type MediaType = "image" | "document" | "video" | "audio";
+
 export type Message = {
   id: string;
   conversation_id: string;
@@ -96,6 +98,9 @@ export type Message = {
   body: string;
   provider_message_id: string | null;
   status: MessageStatus;
+  media_url: string | null;
+  media_type: MediaType | null;
+  media_filename: string | null;
   created_at: string;
 };
 

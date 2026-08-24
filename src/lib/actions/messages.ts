@@ -5,7 +5,8 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentProfile } from "@/lib/supabase/profile";
-import { sendWhatsAppMessage } from "@/lib/whatsapp/provider";
+import { sendWhatsAppMessage, sendWhatsAppMediaMessage } from "@/lib/whatsapp/provider";
+import type { MediaType } from "@/lib/types";
 
 export type SendMessageState = { error: string | null };
 
@@ -107,6 +108,119 @@ export async function sendMessage(
     patient_id: conversation.patient_id,
     direction: "outbound",
     body: parsed.data.body,
+    provider_message_id: result.ok ? result.providerMessageId : null,
+    status: result.ok ? "sent" : "failed",
+  });
+
+  if (insertErr) {
+    return { error: insertErr.message };
+  }
+
+  await supabase
+    .from("conversations")
+    .update({ last_message_at: new Date().toISOString() })
+    .eq("id", conversationId);
+
+  revalidatePath(`/clinic/inbox/${conversationId}`);
+  revalidatePath("/clinic/inbox");
+
+  if (!result.ok) {
+    return { error: `Saved, but WhatsApp did not accept it: ${result.error}` };
+  }
+
+  return { error: null };
+}
+
+export type SendMediaState = { error: string | null };
+
+export async function sendMediaMessage(
+  conversationId: string,
+  input: { mediaUrl: string; mediaType: MediaType; filename: string; caption: string }
+): Promise<SendMediaState> {
+  const profile = await getCurrentProfile();
+  if (
+    !profile ||
+    (profile.role !== "clinic_admin" && profile.role !== "receptionist") ||
+    !profile.clinic_id
+  ) {
+    return { error: "Only clinic staff can send messages." };
+  }
+
+  if (!input.mediaUrl) {
+    return { error: "No file to send." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: conversation } = await supabase
+    .from("conversations")
+    .select("id, clinic_id, patient_id")
+    .eq("id", conversationId)
+    .single();
+
+  if (!conversation) {
+    return { error: "Conversation not found." };
+  }
+
+  const { data: patient } = await supabase
+    .from("patients")
+    .select("whatsapp_number")
+    .eq("id", conversation.patient_id)
+    .single();
+
+  if (!patient) {
+    return { error: "Patient not found." };
+  }
+
+  const { data: lastInbound } = await supabase
+    .from("messages")
+    .select("created_at")
+    .eq("conversation_id", conversationId)
+    .eq("direction", "inbound")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const windowOpen =
+    !!lastInbound && Date.now() - new Date(lastInbound.created_at).getTime() < SERVICE_WINDOW_MS;
+
+  if (!windowOpen) {
+    return {
+      error:
+        "The 24-hour service window is closed for this patient. Send an approved template instead.",
+    };
+  }
+
+  const admin = createAdminClient();
+  const { data: credential } = await admin
+    .from("whatsapp_credentials")
+    .select("phone_number_id, access_token")
+    .eq("clinic_id", conversation.clinic_id)
+    .maybeSingle();
+
+  if (!credential) {
+    return { error: "This clinic has not connected WhatsApp yet." };
+  }
+
+  const result = await sendWhatsAppMediaMessage({
+    phoneNumberId: credential.phone_number_id,
+    accessToken: credential.access_token,
+    to: patient.whatsapp_number,
+    mediaType: input.mediaType,
+    mediaUrl: input.mediaUrl,
+    caption: input.caption || undefined,
+    filename: input.mediaType === "document" ? input.filename : undefined,
+  });
+
+  const { error: insertErr } = await supabase.from("messages").insert({
+    conversation_id: conversationId,
+    clinic_id: conversation.clinic_id,
+    patient_id: conversation.patient_id,
+    direction: "outbound",
+    body: input.caption || "",
+    media_url: input.mediaUrl,
+    media_type: input.mediaType,
+    media_filename: input.filename || null,
     provider_message_id: result.ok ? result.providerMessageId : null,
     status: result.ok ? "sent" : "failed",
   });
