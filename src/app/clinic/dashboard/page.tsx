@@ -20,6 +20,8 @@ import { QuickActions } from "@/components/quick-actions";
 import { StatusToneBadge } from "@/components/status-tone-badge";
 import { AttentionList } from "@/components/attention-list";
 import { ComingSoon } from "@/components/coming-soon";
+import { BillingStatusBanner } from "@/components/billing-status-banner";
+import { getClinicMessagingStatus } from "@/lib/billing";
 
 function greeting() {
   const hour = new Date().getHours();
@@ -45,6 +47,10 @@ export default async function ClinicDashboardPage() {
   const { data: clinic } = profile?.clinic_id
     ? await supabase.from("clinics").select("name").eq("id", profile.clinic_id).single()
     : { data: null };
+
+  const billingStatus = profile?.clinic_id
+    ? await getClinicMessagingStatus(profile.clinic_id)
+    : null;
 
   const now = new Date();
   const startOfToday = new Date(now);
@@ -195,6 +201,8 @@ export default async function ClinicDashboardPage() {
           Here&apos;s {clinic?.name ?? "your clinic"}&apos;s activity for today.
         </p>
       </div>
+
+      {billingStatus && !billingStatus.canSend && <BillingStatusBanner status={billingStatus} />}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard

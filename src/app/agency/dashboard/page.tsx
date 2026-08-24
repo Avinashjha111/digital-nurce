@@ -18,6 +18,7 @@ import { ActivityList, type ActivityItem } from "@/components/activity-list";
 import { QuickActions } from "@/components/quick-actions";
 import { StatusToneBadge } from "@/components/status-tone-badge";
 import { AttentionList } from "@/components/attention-list";
+import { getClinicMessagingStatus } from "@/lib/billing";
 
 function greeting() {
   const hour = new Date().getHours();
@@ -117,6 +118,23 @@ export default async function AgencyDashboardPage() {
   const activeClinics = clinics?.filter((c) => c.whatsapp_status === "connected").length ?? 0;
   const disconnectedClinics = clinics?.filter((c) => c.whatsapp_status !== "connected") ?? [];
 
+  // Billing: which of this agency's clinics can't send right now, and why
+  // -- same source-of-truth function the actual send paths enforce, so the
+  // dashboard can never claim a different state than what's really blocked.
+  const billingStatuses = await Promise.all(
+    (clinics ?? []).map(async (c) => ({ clinic: c, status: await getClinicMessagingStatus(c.id) }))
+  );
+  const blockedClinics = billingStatuses.filter((b) => !b.status.canSend);
+  const expiredCount = blockedClinics.filter(
+    (b) => !b.status.canSend && b.status.reason === "expired"
+  ).length;
+  const zeroBalanceCount = blockedClinics.filter(
+    (b) => !b.status.canSend && b.status.reason === "zero_balance"
+  ).length;
+  const noPlanCount = blockedClinics.filter(
+    (b) => !b.status.canSend && b.status.reason === "no_plan"
+  ).length;
+
   const pendingReviews =
     prescriptions?.filter((p) => ["uploaded", "processing", "review_required"].includes(p.status))
       .length ?? 0;
@@ -187,6 +205,24 @@ export default async function AgencyDashboardPage() {
   const rankedClinics = [...clinicStats.values()].sort((a, b) => b.messages - a.messages).slice(0, 5);
 
   const attentionItems = [
+    zeroBalanceCount > 0 && {
+      tone: "danger" as const,
+      text: `${zeroBalanceCount} clinic${zeroBalanceCount > 1 ? "s" : ""} out of WhatsApp messages`,
+      href: "/agency/clinics",
+      cta: "View",
+    },
+    expiredCount > 0 && {
+      tone: "danger" as const,
+      text: `${expiredCount} clinic${expiredCount > 1 ? "s" : ""} plan${expiredCount > 1 ? "s" : ""} expired`,
+      href: "/agency/clinics",
+      cta: "View",
+    },
+    noPlanCount > 0 && {
+      tone: "warning" as const,
+      text: `${noPlanCount} clinic${noPlanCount > 1 ? "s" : ""} with no active plan yet`,
+      href: "/agency/clinics",
+      cta: "View",
+    },
     disconnectedClinics.length > 0 && {
       tone: "danger" as const,
       text: `${disconnectedClinics.length} clinic${disconnectedClinics.length > 1 ? "s" : ""} disconnected from WhatsApp`,

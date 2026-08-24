@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentProfile } from "@/lib/supabase/profile";
 import { sendWhatsAppTemplateMessage } from "@/lib/whatsapp/provider";
 import { extractPlaceholders } from "@/lib/whatsapp/templates";
-import { deductMessageUnits } from "@/lib/billing";
+import { deductMessageUnits, getClinicMessagingStatus, BLOCKED_REASON_MESSAGE } from "@/lib/billing";
 
 export type SendTemplateState = { error: string | null; success?: boolean };
 
@@ -39,6 +39,11 @@ export async function sendTemplateMessage(
     .single();
   if (!patient) {
     return { error: "Patient not found." };
+  }
+
+  const billingStatus = await getClinicMessagingStatus(patient.clinic_id);
+  if (!billingStatus.canSend) {
+    return { error: BLOCKED_REASON_MESSAGE[billingStatus.reason] };
   }
 
   const { data: template } = await supabase

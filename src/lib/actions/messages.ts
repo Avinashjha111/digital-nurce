@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentProfile } from "@/lib/supabase/profile";
 import { sendWhatsAppMessage, sendWhatsAppMediaMessage } from "@/lib/whatsapp/provider";
-import { deductMessageUnits } from "@/lib/billing";
+import { deductMessageUnits, getClinicMessagingStatus, BLOCKED_REASON_MESSAGE } from "@/lib/billing";
 import type { MediaType } from "@/lib/types";
 
 export type SendMessageState = { error: string | null };
@@ -48,6 +48,11 @@ export async function sendMessage(
 
   if (!conversation) {
     return { error: "Conversation not found." };
+  }
+
+  const billingStatus = await getClinicMessagingStatus(conversation.clinic_id);
+  if (!billingStatus.canSend) {
+    return { error: BLOCKED_REASON_MESSAGE[billingStatus.reason] };
   }
 
   const { data: patient } = await supabase
@@ -165,6 +170,11 @@ export async function sendMediaMessage(
 
   if (!conversation) {
     return { error: "Conversation not found." };
+  }
+
+  const billingStatus = await getClinicMessagingStatus(conversation.clinic_id);
+  if (!billingStatus.canSend) {
+    return { error: BLOCKED_REASON_MESSAGE[billingStatus.reason] };
   }
 
   const { data: patient } = await supabase

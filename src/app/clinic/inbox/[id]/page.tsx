@@ -13,6 +13,8 @@ import { MarkRead } from "@/components/clinic/mark-read";
 import { WhatsAppAvatar } from "@/components/clinic/whatsapp-avatar";
 import { MessageStatusTicks } from "@/components/clinic/message-status-ticks";
 import { MessageMedia } from "@/components/clinic/message-media";
+import { BillingBlockedBanner } from "@/components/clinic/billing-blocked-banner";
+import { getClinicMessagingStatus } from "@/lib/billing";
 import type { ClinicChatAppearance, Conversation, Message, Patient } from "@/lib/types";
 
 const SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -71,6 +73,8 @@ export default async function ConversationThreadPage({
   const isWindowOpen = lastInboundAt
     ? new Date().getTime() - new Date(lastInboundAt).getTime() < SERVICE_WINDOW_MS
     : false;
+
+  const billingStatus = await getClinicMessagingStatus(conversation.clinic_id);
 
   const patientName = patient?.name ?? "Unknown";
 
@@ -173,7 +177,9 @@ export default async function ConversationThreadPage({
         )}
       </div>
 
-      {isWindowOpen ? (
+      {!billingStatus.canSend ? (
+        <BillingBlockedBanner status={billingStatus} />
+      ) : isWindowOpen ? (
         <SendMessageForm conversationId={id} clinicId={conversation.clinic_id} />
       ) : (
         <ServiceWindowLocked patientId={conversation.patient_id} />

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendWhatsAppTemplateMessage } from "@/lib/whatsapp/provider";
 import { extractPlaceholders } from "@/lib/whatsapp/templates";
-import { deductMessageUnits } from "@/lib/billing";
+import { deductMessageUnits, getClinicMessagingStatus, BLOCKED_REASON_MESSAGE } from "@/lib/billing";
 
 export const dynamic = "force-dynamic";
 
@@ -125,6 +125,11 @@ async function sendOne(
   const patient = followUp.patients;
   if (!patient) {
     return { ok: false, error: "Patient record no longer exists." };
+  }
+
+  const billingStatus = await getClinicMessagingStatus(followUp.clinic_id);
+  if (!billingStatus.canSend) {
+    return { ok: false, error: BLOCKED_REASON_MESSAGE[billingStatus.reason] };
   }
 
   const clinic = clinicById.get(followUp.clinic_id);
