@@ -13,7 +13,7 @@ export function InboxShell({ list, thread }: { list: ReactNode; thread: ReactNod
   const hasOpenThread = pathname !== "/clinic/inbox";
 
   return (
-    <div className="flex h-[calc(100vh-8.5rem)] min-h-0 overflow-hidden rounded-lg border bg-background">
+    <div className="flex h-[calc(100vh-13.5rem)] min-h-0 overflow-hidden rounded-lg border bg-background md:h-[calc(100vh-8.5rem)]">
       <aside
         className={cn(
           "w-full shrink-0 flex-col overflow-y-auto border-r md:flex md:w-full md:max-w-xs",

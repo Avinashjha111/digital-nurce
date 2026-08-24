@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { Menu, Stethoscope } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +12,7 @@ import { agencyNavGroups, clinicNavGroups } from "@/components/layout/nav-items"
 import { LogoutButton } from "@/components/logout-button";
 import { InstallAppButton } from "@/components/pwa/install-app-button";
 import { InstallAppBanner } from "@/components/pwa/install-app-banner";
+import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
 
 export function AppShell({
   variant,
@@ -87,7 +89,12 @@ export function AppShell({
             <LogoutButton />
           </div>
         </header>
-        <main className="flex-1 bg-background p-4 md:p-6">
+        <main
+          className={cn(
+            "flex-1 bg-background p-4 md:p-6",
+            variant === "clinic" && "pb-20 md:pb-6"
+          )}
+        >
           {variant === "clinic" && (
             <div className="mb-4">
               <InstallAppBanner />
@@ -96,6 +103,8 @@ export function AppShell({
           {children}
         </main>
       </div>
+
+      {variant === "clinic" && <MobileBottomNav />}
     </div>
   );
 }
