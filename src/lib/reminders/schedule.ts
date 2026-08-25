@@ -1,13 +1,19 @@
+// Every clinic today is in India, and the Timings field is what a
+// receptionist types on their own clock -- so "4:11 pm" means 4:11 pm IST,
+// not UTC. There's no per-clinic timezone setting yet, so this is a fixed
+// Asia/Kolkata (UTC+5:30, no DST) offset rather than a real guess.
+const IST_OFFSET_MINUTES = 5 * 60 + 30;
+
 // Turns a medicine's explicit timings + duration into concrete reminder
 // datetimes -- never guesses a schedule from free-text frequency/dosage,
 // only from the structured fields a human confirmed during review.
 //
 // One reminder per (day, timing) pair, days 0..durationDays-1 starting
-// from `from`'s calendar date. Timings are treated as UTC clock times
-// (the app has no per-clinic timezone setting yet). Slots already in the
-// past relative to `from` are dropped -- this is what makes "approved at
-// 3pm with an 8am timing" naturally skip straight to tomorrow's 8am
-// instead of scheduling a reminder in the past.
+// from `from`'s IST calendar date (so day boundaries match the clinic's
+// own day, not UTC's). Slots already in the past relative to `from` are
+// dropped -- this is what makes "approved at 3pm IST with an 8am timing"
+// naturally skip straight to tomorrow's 8am instead of scheduling a
+// reminder in the past.
 export function buildReminderSchedule(
   timings: string[] | null,
   durationDays: number | null,
@@ -23,20 +29,24 @@ export function buildReminderSchedule(
 
   if (parsedTimings.length === 0) return [];
 
+  // Shift `from` forward by the IST offset so reading its UTC-getters back
+  // gives IST wall-clock calendar fields, then shift each built slot back
+  // by the same offset to get the real UTC instant to store.
+  const fromIst = new Date(from.getTime() + IST_OFFSET_MINUTES * 60 * 1000);
+
   const slots: Date[] = [];
   for (let day = 0; day < durationDays; day++) {
     for (const { hour, minute } of parsedTimings) {
-      const slot = new Date(
-        Date.UTC(
-          from.getUTCFullYear(),
-          from.getUTCMonth(),
-          from.getUTCDate() + day,
-          hour,
-          minute,
-          0,
-          0
-        )
+      const istSlotAsUtcMs = Date.UTC(
+        fromIst.getUTCFullYear(),
+        fromIst.getUTCMonth(),
+        fromIst.getUTCDate() + day,
+        hour,
+        minute,
+        0,
+        0
       );
+      const slot = new Date(istSlotAsUtcMs - IST_OFFSET_MINUTES * 60 * 1000);
       if (slot.getTime() >= from.getTime()) {
         slots.push(slot);
       }
@@ -75,4 +85,20 @@ function parseTiming(raw: string): { hour: number; minute: number } | null {
   }
 
   return null;
+}
+
+// Reminder pages render server-side, where Intl's default timezone is
+// whatever the VPS runs (UTC) -- not the clinic's own IST clock. Without
+// this, a reminder scheduled for 4:11 pm IST would display as "4:11 PM"
+// (actually the UTC instant's clock reading, i.e. 9:41 pm IST) and look
+// wrong to the exact person who typed "4:11 pm" in the first place.
+export function formatReminderTime(iso: string): string {
+  return new Date(iso).toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }

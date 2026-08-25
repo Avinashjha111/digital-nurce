@@ -2,23 +2,7 @@ import { Bell } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/layout/page-header";
 import { ComingSoon } from "@/components/coming-soon";
-import { Card, CardContent } from "@/components/ui/card";
-import { ReminderStatusBadge } from "@/components/reminder-status-badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import type { Reminder } from "@/lib/types";
-
-type ReminderRow = Reminder & {
-  patients: { name: string } | null;
-  prescription_medicines: { name: string } | null;
-  clinics: { name: string } | null;
-};
+import { AgencyRemindersTable, type AgencyReminderRow } from "@/components/agency/agency-reminders-table";
 
 export default async function AgencyRemindersPage() {
   const supabase = await createClient();
@@ -26,7 +10,7 @@ export default async function AgencyRemindersPage() {
     .from("reminders")
     .select("*, patients(name), prescription_medicines(name), clinics(name)")
     .order("scheduled_at", { ascending: false })
-    .returns<ReminderRow[]>();
+    .returns<AgencyReminderRow[]>();
 
   return (
     <div>
@@ -42,38 +26,7 @@ export default async function AgencyRemindersPage() {
           milestone="Reminders are created automatically when a clinic approves a prescription."
         />
       ) : (
-        <Card>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Patient</TableHead>
-                  <TableHead>Clinic</TableHead>
-                  <TableHead>Medicine</TableHead>
-                  <TableHead>Scheduled</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {reminders.map((reminder) => (
-                  <TableRow key={reminder.id}>
-                    <TableCell className="font-medium">
-                      {reminder.patients?.name ?? "Unknown"}
-                    </TableCell>
-                    <TableCell>{reminder.clinics?.name ?? "—"}</TableCell>
-                    <TableCell>{reminder.prescription_medicines?.name ?? "—"}</TableCell>
-                    <TableCell>
-                      {new Date(reminder.scheduled_at).toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      <ReminderStatusBadge status={reminder.status} />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <AgencyRemindersTable reminders={reminders} />
       )}
     </div>
   );
