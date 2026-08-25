@@ -90,12 +90,24 @@ export async function POST(request: NextRequest) {
       const phoneNumberId = value?.metadata?.phone_number_id;
       if (!phoneNumberId) continue;
 
-      const { data: credential } = await admin
+      const { data: credential, error: credentialError } = await admin
         .from("whatsapp_credentials")
         .select("clinic_id, access_token")
         .eq("phone_number_id", phoneNumberId)
         .maybeSingle();
 
+      if (credentialError) {
+        // Not "unknown number" -- a real lookup failure (e.g. the unique
+        // constraint being violated somehow and this returning >1 row).
+        // Surface it instead of silently dropping every message on this
+        // number, which is exactly what happened before that constraint
+        // existed.
+        console.error(
+          `[whatsapp webhook] credential lookup failed for phone_number_id=${phoneNumberId}:`,
+          credentialError.message
+        );
+        continue;
+      }
       if (!credential) continue; // unknown phone number id -- ignore
       const clinicId = credential.clinic_id;
 

@@ -72,6 +72,12 @@ export async function connectWhatsApp(
   });
 
   if (credError) {
+    if (credError.code === "23505") {
+      return {
+        error:
+          "This WhatsApp phone number is already connected to a different clinic. Each clinic needs its own number -- disconnect it from the other clinic first if this was a mistake.",
+      };
+    }
     return { error: `Failed to store credentials: ${credError.message}` };
   }
 
