@@ -1,26 +1,8 @@
-import Link from "next/link";
 import { Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/layout/page-header";
 import { ComingSoon } from "@/components/coming-soon";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { DeletePatientDialog } from "@/components/agency/delete-patient-dialog";
-
-type PatientRow = {
-  id: string;
-  name: string;
-  whatsapp_number: string;
-  created_at: string;
-  clinics: { name: string } | null;
-};
+import { AgencyPatientsTable, type AgencyPatientRow } from "@/components/agency/agency-patients-table";
 
 export default async function AgencyPatientsPage() {
   const supabase = await createClient();
@@ -28,7 +10,7 @@ export default async function AgencyPatientsPage() {
     .from("patients")
     .select("id, name, whatsapp_number, created_at, clinics(name)")
     .order("created_at", { ascending: false })
-    .returns<PatientRow[]>();
+    .returns<AgencyPatientRow[]>();
 
   return (
     <div>
@@ -41,43 +23,7 @@ export default async function AgencyPatientsPage() {
           milestone="Patients appear here once clinics register them."
         />
       ) : (
-        <Card>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Clinic</TableHead>
-                  <TableHead>WhatsApp number</TableHead>
-                  <TableHead>Added</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {patients.map((patient) => (
-                  <TableRow key={patient.id}>
-                    <TableCell className="font-medium">
-                      <Link
-                        href={`/agency/patients/${patient.id}`}
-                        className="hover:underline"
-                      >
-                        {patient.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{patient.clinics?.name ?? "—"}</TableCell>
-                    <TableCell>+{patient.whatsapp_number}</TableCell>
-                    <TableCell>
-                      {new Date(patient.created_at).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DeletePatientDialog patientId={patient.id} patientName={patient.name} />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <AgencyPatientsTable patients={patients} />
       )}
     </div>
   );
