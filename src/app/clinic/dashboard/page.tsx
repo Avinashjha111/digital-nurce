@@ -1,11 +1,11 @@
 import {
-  AlertCircle,
   Bell,
   CalendarClock,
   CalendarPlus,
   FileText,
   Inbox as InboxIcon,
   MessageCircle,
+  MessageSquareText,
   UploadCloud,
   UserPlus,
   Users,
@@ -255,7 +255,28 @@ export default async function ClinicDashboardPage() {
           href="/clinic/follow-ups"
           cta="View"
         />
-        <KpiCard label="Failed Reminders" value={failedReminderCount ?? 0} icon={AlertCircle} href="/clinic/reminders" cta="View" />
+        <KpiCard
+          label="Messages Remaining"
+          value={billingStatus?.canSend ? billingStatus.messagesRemaining : billingStatus ? 0 : "—"}
+          icon={MessageSquareText}
+          statuses={
+            billingStatus && !billingStatus.canSend
+              ? [
+                  {
+                    tone: "danger",
+                    label:
+                      billingStatus.reason === "no_plan"
+                        ? "No active plan"
+                        : billingStatus.reason === "expired"
+                          ? "Plan expired"
+                          : "Out of messages",
+                  },
+                ]
+              : undefined
+          }
+          href="/clinic/usage"
+          cta="View Usage"
+        />
         <KpiCard label="Active Patients" value={patientCount ?? 0} icon={Users} href="/clinic/patients" cta="View Patients" />
       </div>
 
