@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
-import { CheckCircle2, Plus, Trash2 } from "lucide-react";
+import { useActionState, useMemo, useRef, useState } from "react";
+import { Bold, CheckCircle2, Italic, Plus, Strikethrough, Trash2, Variable } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { createTemplate, type CreateTemplateState } from "@/lib/actions/templates";
 import { extractPlaceholders, hasLeadingOrTrailingVariable } from "@/lib/whatsapp/templates";
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { TemplatePreview } from "@/components/clinic/template-preview";
 import {
   Select,
   SelectContent,
@@ -90,6 +91,8 @@ export function CreateTemplateDialog({ clinicId }: { clinicId: string }) {
   const [buttons, setButtons] = useState<WhatsappTemplateButton[]>([]);
   const [bodyExamples, setBodyExamples] = useState<Record<number, string>>({});
 
+  const bodyTextareaRef = useRef<HTMLTextAreaElement>(null);
+
   const boundAction = createTemplate.bind(null, clinicId);
   const [state, formAction, pending] = useActionState(boundAction, initialState);
 
@@ -103,6 +106,41 @@ export function CreateTemplateDialog({ clinicId }: { clinicId: string }) {
     () => hasLeadingOrTrailingVariable(headerText),
     [headerText]
   );
+
+  // Wraps the selected text in the body textarea with a marker (or drops
+  // the marker pair at the cursor if nothing's selected) -- WhatsApp's own
+  // inline styles: *bold*, _italic_, ~strike~.
+  function wrapBodySelection(marker: string) {
+    const textarea = bodyTextareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selected = bodyText.slice(start, end);
+    const next = bodyText.slice(0, start) + marker + selected + marker + bodyText.slice(end);
+    setBodyText(next);
+    requestAnimationFrame(() => {
+      textarea.focus();
+      const cursor = selected ? end + marker.length * 2 : start + marker.length;
+      textarea.setSelectionRange(cursor, cursor);
+    });
+  }
+
+  function insertVariable() {
+    const textarea = bodyTextareaRef.current;
+    if (!textarea) return;
+    const existing = extractPlaceholders(bodyText);
+    const nextNum = existing.length > 0 ? Math.max(...existing) + 1 : 1;
+    const token = `{{${nextNum}}}`;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const next = bodyText.slice(0, start) + token + bodyText.slice(end);
+    setBodyText(next);
+    requestAnimationFrame(() => {
+      textarea.focus();
+      const cursor = start + token.length;
+      textarea.setSelectionRange(cursor, cursor);
+    });
+  }
 
   async function handleHeaderFileChange(file: File | null) {
     setHeaderMediaPath("");
@@ -142,7 +180,7 @@ export function CreateTemplateDialog({ clinicId }: { clinicId: string }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<Button />}>Create Template</DialogTrigger>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg lg:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Create WhatsApp Template</DialogTitle>
           <DialogDescription>
@@ -160,7 +198,11 @@ export function CreateTemplateDialog({ clinicId }: { clinicId: string }) {
             <DialogClose render={<Button />}>Done</DialogClose>
           </div>
         ) : (
-          <form action={formAction} className="flex flex-col gap-4">
+          <form
+            action={formAction}
+            className="flex flex-col gap-6 lg:grid lg:grid-cols-[1fr_260px] lg:items-start"
+          >
+            <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
               <Label htmlFor="name">Template name</Label>
               <Input
@@ -291,8 +333,47 @@ export function CreateTemplateDialog({ clinicId }: { clinicId: string }) {
             </div>
 
             <div className="flex flex-col gap-2">
-              <Label htmlFor="body_text">Body text</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="body_text">Body text</Label>
+                <div className="flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    title="Bold"
+                    onClick={() => wrapBodySelection("*")}
+                    className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    <Bold className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    title="Italic"
+                    onClick={() => wrapBodySelection("_")}
+                    className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    <Italic className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    title="Strikethrough"
+                    onClick={() => wrapBodySelection("~")}
+                    className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    <Strikethrough className="size-3.5" />
+                  </button>
+                  <span className="mx-1 h-4 w-px bg-border" />
+                  <button
+                    type="button"
+                    title="Insert variable"
+                    onClick={insertVariable}
+                    className="flex items-center gap-1 rounded px-1.5 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    <Variable className="size-3.5" />
+                    Variable
+                  </button>
+                </div>
+              </div>
               <Textarea
+                ref={bodyTextareaRef}
                 id="body_text"
                 name="body_text"
                 rows={4}
@@ -437,6 +518,20 @@ export function CreateTemplateDialog({ clinicId }: { clinicId: string }) {
             >
               {pending ? "Submitting..." : "Submit to Meta"}
             </Button>
+            </div>
+
+            <div className="lg:sticky lg:top-0">
+              <p className="mb-2 text-xs font-medium text-muted-foreground uppercase">Preview</p>
+              <TemplatePreview
+                headerType={headerType}
+                headerText={headerText}
+                headerExample={headerExample}
+                bodyText={bodyText}
+                bodyExamples={bodyExamples}
+                footerText={footerText}
+                buttons={buttons}
+              />
+            </div>
           </form>
         )}
       </DialogContent>
