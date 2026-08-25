@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { AlertTriangle, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, Plus, Trash2, X } from "lucide-react";
 import {
   submitPrescriptionReview,
   type SubmitPrescriptionReviewInput,
@@ -20,10 +20,34 @@ type MedicineRow = {
   dosage: string;
   frequency: string;
   durationDays: string;
-  timings: string;
+  timings: string[];
   instruction: string;
   needsReview: boolean;
 };
+
+// Best-effort so a medicine saved before the time-picker existed (free
+// text like "4:11 pm") still shows up as an editable chip instead of a
+// blank one -- <input type="time"> only accepts strict 24-hour "HH:MM".
+function toTimeInputValue(raw: string): string {
+  const t = raw.trim();
+  if (/^\d{1,2}:\d{2}$/.test(t)) {
+    const [h, m] = t.split(":");
+    return `${h.padStart(2, "0")}:${m}`;
+  }
+  const h12 = /^(\d{1,2}):(\d{2})\s*(am|pm)$/i.exec(t);
+  if (h12) {
+    let hour = Number(h12[1]);
+    const minute = h12[2];
+    const meridiem = h12[3].toLowerCase();
+    if (meridiem === "am") {
+      if (hour === 12) hour = 0;
+    } else if (hour !== 12) {
+      hour += 12;
+    }
+    return `${String(hour).padStart(2, "0")}:${minute}`;
+  }
+  return "";
+}
 
 function toRow(medicine: PrescriptionMedicine): MedicineRow {
   return {
@@ -33,7 +57,7 @@ function toRow(medicine: PrescriptionMedicine): MedicineRow {
     dosage: medicine.dosage ?? "",
     frequency: medicine.frequency ?? "",
     durationDays: medicine.duration_days != null ? String(medicine.duration_days) : "",
-    timings: medicine.timings?.join(", ") ?? "",
+    timings: medicine.timings?.map(toTimeInputValue) ?? [],
     instruction: medicine.instruction ?? "",
     needsReview: medicine.needs_review,
   };
@@ -46,7 +70,7 @@ function emptyRow(): MedicineRow {
     dosage: "",
     frequency: "",
     durationDays: "",
-    timings: "",
+    timings: [],
     instruction: "",
     needsReview: false,
   };
@@ -85,6 +109,30 @@ export function PrescriptionReviewForm({
     setRows((prev) => prev.filter((r) => r.key !== row.key));
   }
 
+  function addTiming(rowKey: string) {
+    setRows((prev) =>
+      prev.map((row) => (row.key === rowKey ? { ...row, timings: [...row.timings, ""] } : row))
+    );
+  }
+
+  function updateTiming(rowKey: string, index: number, value: string) {
+    setRows((prev) =>
+      prev.map((row) =>
+        row.key === rowKey
+          ? { ...row, timings: row.timings.map((t, i) => (i === index ? value : t)) }
+          : row
+      )
+    );
+  }
+
+  function removeTiming(rowKey: string, index: number) {
+    setRows((prev) =>
+      prev.map((row) =>
+        row.key === rowKey ? { ...row, timings: row.timings.filter((_, i) => i !== index) } : row
+      )
+    );
+  }
+
   function submit(decision: "approved" | "rejected") {
     setError(null);
 
@@ -104,7 +152,7 @@ export function PrescriptionReviewForm({
           dosage: row.dosage,
           frequency: row.frequency,
           durationDays: row.durationDays ? Number(row.durationDays) : null,
-          timings: row.timings,
+          timings: row.timings.filter(Boolean).join(", "),
           instruction: row.instruction,
         })),
     };
@@ -197,13 +245,39 @@ export function PrescriptionReviewForm({
                   onChange={(e) => updateRow(row.key, { durationDays: e.target.value })}
                 />
               </div>
-              <div className="flex flex-col gap-1.5">
+              <div className="col-span-2 flex flex-col gap-1.5 sm:col-span-4">
                 <Label className="text-xs text-muted-foreground">Timings</Label>
-                <Input
-                  value={row.timings}
-                  onChange={(e) => updateRow(row.key, { timings: e.target.value })}
-                  placeholder="08:00, 14:00, 20:00"
-                />
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {row.timings.map((time, i) => (
+                    <div key={i} className="flex items-center gap-1">
+                      <Input
+                        type="time"
+                        value={time}
+                        onChange={(e) => updateTiming(row.key, i, e.target.value)}
+                        className="w-auto"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Remove timing"
+                        onClick={() => removeTiming(row.key, i)}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() => addTiming(row.key)}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add time
+                  </Button>
+                </div>
               </div>
             </div>
 
