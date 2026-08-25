@@ -11,6 +11,7 @@ const BATCH_SIZE = 50;
 type ClaimedReminder = {
   id: string;
   clinic_id: string;
+  patient_id: string;
   scheduled_at: string;
   patients: { name: string; whatsapp_number: string } | null;
   prescription_medicines: {
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
     .eq("status", "scheduled")
     .lte("scheduled_at", now)
     .select(
-      "id, clinic_id, scheduled_at, patients(name, whatsapp_number), prescription_medicines(name, dosage, instruction)"
+      "id, clinic_id, patient_id, scheduled_at, patients(name, whatsapp_number), prescription_medicines(name, dosage, instruction)"
     )
     .limit(BATCH_SIZE)
     .returns<ClaimedReminder[]>();
@@ -92,7 +93,7 @@ export async function GET(request: NextRequest) {
   let failed = 0;
 
   for (const reminder of claimed) {
-    const result = await sendOne(reminder, clinicById, credentialByClinic, templateById);
+    const result = await sendOne(admin, reminder, clinicById, credentialByClinic, templateById);
     if (result.ok) {
       sent++;
       await admin
@@ -112,6 +113,7 @@ export async function GET(request: NextRequest) {
 }
 
 async function sendOne(
+  admin: ReturnType<typeof createAdminClient>,
   reminder: ClaimedReminder,
   clinicById: Map<string, { id: string; reminder_template_id: string | null }>,
   credentialByClinic: Map<
@@ -205,10 +207,62 @@ async function sendOne(
     return { ok: false, error: result.error };
   }
 
+  const renderedBody = template.body_text
+    .replace("{{1}}", patient.name)
+    .replace("{{2}}", medicineText);
+
+  await logReminderMessage(admin, reminder, renderedBody, result.providerMessageId);
+
   await deductMessageUnits(
     reminder.clinic_id,
     template.category === "marketing" ? "marketing_template" : "standard"
   );
 
   return { ok: true, providerMessageId: result.providerMessageId };
+}
+
+// Reminders previously never showed up as a real message anywhere (not in
+// the clinic's WhatsApp inbox, not in any delivery report) -- they only
+// updated their own `reminders` row. This makes the send visible the same
+// way every other outbound message is: a real messages row, find-or-create
+// conversation just like an agency template send does.
+async function logReminderMessage(
+  admin: ReturnType<typeof createAdminClient>,
+  reminder: ClaimedReminder,
+  body: string,
+  providerMessageId: string | null
+) {
+  const { data: existingConversation } = await admin
+    .from("conversations")
+    .select("id")
+    .eq("patient_id", reminder.patient_id)
+    .maybeSingle();
+
+  let conversationId = existingConversation?.id as string | undefined;
+
+  if (!conversationId) {
+    const { data: newConversation } = await admin
+      .from("conversations")
+      .insert({ clinic_id: reminder.clinic_id, patient_id: reminder.patient_id })
+      .select("id")
+      .single();
+    if (!newConversation) return;
+    conversationId = newConversation.id;
+  }
+
+  await admin.from("messages").insert({
+    conversation_id: conversationId,
+    clinic_id: reminder.clinic_id,
+    patient_id: reminder.patient_id,
+    direction: "outbound",
+    source: "reminder",
+    body,
+    provider_message_id: providerMessageId,
+    status: "sent",
+  });
+
+  await admin
+    .from("conversations")
+    .update({ last_message_at: new Date().toISOString() })
+    .eq("id", conversationId);
 }

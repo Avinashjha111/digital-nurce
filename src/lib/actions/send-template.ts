@@ -141,6 +141,7 @@ export async function sendTemplateMessage(
     clinic_id: patient.clinic_id,
     patient_id: patientId,
     direction: "outbound",
+    source: "template",
     body: renderedBody,
     provider_message_id: result.ok ? result.providerMessageId : null,
     status: result.ok ? "sent" : "failed",

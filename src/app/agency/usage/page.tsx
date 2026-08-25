@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { getCurrentProfile } from "@/lib/supabase/profile";
 import { createClient } from "@/lib/supabase/server";
 import { getClinicUsageSummary } from "@/lib/billing";
@@ -49,12 +50,13 @@ export default async function AgencyUsagePage() {
                 <TableHead className="text-right">Media sent</TableHead>
                 <TableHead className="text-right">Reminders</TableHead>
                 <TableHead className="text-right">Follow-ups</TableHead>
+                <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground">
                     No clinics yet.
                   </TableCell>
                 </TableRow>
@@ -66,7 +68,14 @@ export default async function AgencyUsagePage() {
                     usage.messagesRemaining / usage.includedMessages <= 0.1;
                   return (
                     <TableRow key={clinic.id}>
-                      <TableCell className="font-medium">{clinic.name}</TableCell>
+                      <TableCell className="font-medium">
+                        <Link
+                          href={`/agency/clinics/${clinic.id}/messages`}
+                          className="text-primary hover:underline"
+                        >
+                          {clinic.name}
+                        </Link>
+                      </TableCell>
                       <TableCell>
                         {usage.hasActivePlan ? usage.planName : (
                           <span className="text-muted-foreground">No active plan</span>
@@ -96,6 +105,14 @@ export default async function AgencyUsagePage() {
                       </TableCell>
                       <TableCell className="text-right">
                         {usage.breakdown.followUpsSent.toLocaleString("en-IN")}
+                      </TableCell>
+                      <TableCell>
+                        <Link
+                          href={`/agency/clinics/${clinic.id}/messages`}
+                          className="text-sm font-medium text-primary hover:underline"
+                        >
+                          View log
+                        </Link>
                       </TableCell>
                     </TableRow>
                   );

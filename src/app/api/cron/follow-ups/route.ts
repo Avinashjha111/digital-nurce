@@ -11,6 +11,7 @@ const BATCH_SIZE = 50;
 type ClaimedFollowUp = {
   id: string;
   clinic_id: string;
+  patient_id: string;
   patients: { name: string; whatsapp_number: string } | null;
 };
 
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
     .update({ status: "due" })
     .eq("status", "upcoming")
     .lte("follow_up_date", today)
-    .select("id, clinic_id, patients(name, whatsapp_number)")
+    .select("id, clinic_id, patient_id, patients(name, whatsapp_number)")
     .limit(BATCH_SIZE)
     .returns<ClaimedFollowUp[]>();
 
@@ -76,7 +77,7 @@ export async function GET(request: NextRequest) {
   let failed = 0;
 
   for (const followUp of claimed) {
-    const result = await sendOne(followUp, clinicById, credentialByClinic, templateById);
+    const result = await sendOne(admin, followUp, clinicById, credentialByClinic, templateById);
     if (result.ok) {
       sent++;
       await admin
@@ -102,6 +103,7 @@ export async function GET(request: NextRequest) {
 }
 
 async function sendOne(
+  admin: ReturnType<typeof createAdminClient>,
   followUp: ClaimedFollowUp,
   clinicById: Map<string, { id: string; follow_up_template_id: string | null }>,
   credentialByClinic: Map<
@@ -191,10 +193,58 @@ async function sendOne(
     return { ok: false, error: result.error };
   }
 
+  const renderedBody = template.body_text.replace("{{1}}", patient.name);
+
+  await logFollowUpMessage(admin, followUp, renderedBody, result.providerMessageId);
+
   await deductMessageUnits(
     followUp.clinic_id,
     template.category === "marketing" ? "marketing_template" : "standard"
   );
 
   return { ok: true, providerMessageId: result.providerMessageId };
+}
+
+// Same reasoning as the reminders cron: without this, a follow-up nudge
+// never shows up as a real message anywhere -- only its own follow_ups row
+// updates.
+async function logFollowUpMessage(
+  admin: ReturnType<typeof createAdminClient>,
+  followUp: ClaimedFollowUp,
+  body: string,
+  providerMessageId: string
+) {
+  const { data: existingConversation } = await admin
+    .from("conversations")
+    .select("id")
+    .eq("patient_id", followUp.patient_id)
+    .maybeSingle();
+
+  let conversationId = existingConversation?.id as string | undefined;
+
+  if (!conversationId) {
+    const { data: newConversation } = await admin
+      .from("conversations")
+      .insert({ clinic_id: followUp.clinic_id, patient_id: followUp.patient_id })
+      .select("id")
+      .single();
+    if (!newConversation) return;
+    conversationId = newConversation.id;
+  }
+
+  await admin.from("messages").insert({
+    conversation_id: conversationId,
+    clinic_id: followUp.clinic_id,
+    patient_id: followUp.patient_id,
+    direction: "outbound",
+    source: "follow_up",
+    body,
+    provider_message_id: providerMessageId,
+    status: "sent",
+  });
+
+  await admin
+    .from("conversations")
+    .update({ last_message_at: new Date().toISOString() })
+    .eq("id", conversationId);
 }

@@ -235,6 +235,7 @@ export async function POST(request: NextRequest) {
           clinic_id: clinicId,
           patient_id: patientId,
           direction: "inbound",
+          source: "inbound",
           body,
           media_url: mediaUrl,
           media_type: mediaType,
