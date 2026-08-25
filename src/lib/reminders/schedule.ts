@@ -18,14 +18,7 @@ export function buildReminderSchedule(
   }
 
   const parsedTimings = timings
-    .map((t) => {
-      const match = /^(\d{1,2}):(\d{2})$/.exec(t.trim());
-      if (!match) return null;
-      const hour = Number(match[1]);
-      const minute = Number(match[2]);
-      if (hour > 23 || minute > 59) return null;
-      return { hour, minute };
-    })
+    .map((t) => parseTiming(t))
     .filter((t): t is { hour: number; minute: number } => t !== null);
 
   if (parsedTimings.length === 0) return [];
@@ -51,4 +44,35 @@ export function buildReminderSchedule(
   }
 
   return slots.sort((a, b) => a.getTime() - b.getTime());
+}
+
+// Accepts both 24-hour ("14:00") and 12-hour with am/pm ("2:00 pm",
+// "2:00pm") -- the review form's Timings field is free text, and staff
+// naturally type either. Anything else is dropped rather than guessed.
+function parseTiming(raw: string): { hour: number; minute: number } | null {
+  const t = raw.trim();
+
+  const h24 = /^(\d{1,2}):(\d{2})$/.exec(t);
+  if (h24) {
+    const hour = Number(h24[1]);
+    const minute = Number(h24[2]);
+    if (hour > 23 || minute > 59) return null;
+    return { hour, minute };
+  }
+
+  const h12 = /^(\d{1,2}):(\d{2})\s*(am|pm)$/i.exec(t);
+  if (h12) {
+    let hour = Number(h12[1]);
+    const minute = Number(h12[2]);
+    if (hour < 1 || hour > 12 || minute > 59) return null;
+    const meridiem = h12[3].toLowerCase();
+    if (meridiem === "am") {
+      if (hour === 12) hour = 0;
+    } else if (hour !== 12) {
+      hour += 12;
+    }
+    return { hour, minute };
+  }
+
+  return null;
 }
