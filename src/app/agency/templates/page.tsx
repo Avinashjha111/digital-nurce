@@ -37,7 +37,12 @@ export default async function AgencyTemplatesPage() {
   const supabase = await createClient();
   const { data: templates } = await supabase
     .from("whatsapp_templates")
-    .select("id, clinic_id, name, category, language, body_text, status, rejection_reason, clinics(name)")
+    // clinics has two OTHER fkeys into whatsapp_templates (reminder/follow-up
+    // template assignment), so the embed is ambiguous unless the actual
+    // clinic_id relationship is named explicitly.
+    .select(
+      "id, clinic_id, name, category, language, body_text, status, rejection_reason, clinics!whatsapp_templates_clinic_id_fkey(name)"
+    )
     .order("created_at", { ascending: false })
     .returns<TemplateRow[]>();
 
