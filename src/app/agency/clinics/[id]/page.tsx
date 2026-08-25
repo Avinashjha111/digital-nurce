@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Bell, Building2, CalendarClock, IndianRupee, MessageCircle, MessageSquareText } from "lucide-react";
+import { Bell, Building2, CalendarClock, IndianRupee, MessageCircle, MessageSquareText, Send } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -108,6 +108,16 @@ export default async function ClinicDetailPage({
                 >
                   <MessageSquareText className="h-4 w-4" />
                   Manage Templates
+                </Button>
+              )}
+              {connected && (
+                <Button
+                  variant="outline"
+                  nativeButton={false}
+                  render={<Link href={`/agency/clinics/${clinic.id}/bulk-send`} />}
+                >
+                  <Send className="h-4 w-4" />
+                  Bulk Send Template
                 </Button>
               )}
             </div>
