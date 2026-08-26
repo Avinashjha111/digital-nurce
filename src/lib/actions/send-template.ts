@@ -48,7 +48,7 @@ export async function sendTemplateMessage(
 
   const { data: template } = await supabase
     .from("whatsapp_templates")
-    .select("id, clinic_id, name, language, body_text, status, header_type, header_text, category")
+    .select("id, clinic_id, twilio_content_sid, body_text, status, category")
     .eq("id", templateId)
     .single();
   if (!template) {
@@ -57,46 +57,26 @@ export async function sendTemplateMessage(
   if (template.status !== "approved") {
     return { error: "Only approved templates can be sent." };
   }
-  if (
-    template.header_type === "image" ||
-    template.header_type === "video" ||
-    template.header_type === "document" ||
-    template.header_type === "location"
-  ) {
-    return {
-      error:
-        "Sending templates with an image, video, document, or location header isn't supported yet -- use a text-only or no-header template.",
-    };
-  }
-
-  let headerParameter: string | undefined;
-  if (template.header_type === "text" && template.header_text) {
-    const headerPlaceholders = extractPlaceholders(template.header_text);
-    if (headerPlaceholders.length > 0) {
-      const value = String(formData.get("header_param") ?? "").trim();
-      if (!value) {
-        return { error: "Provide a value for the header variable." };
-      }
-      headerParameter = value;
-    }
+  if (!template.twilio_content_sid) {
+    return { error: "This template has no Twilio content id -- recreate it." };
   }
 
   const placeholders = extractPlaceholders(template.body_text);
-  const parameters: string[] = [];
+  const contentVariables: Record<string, string> = {};
   let renderedBody = template.body_text;
   for (const n of placeholders) {
     const value = String(formData.get(`param_${n}`) ?? "").trim();
     if (!value) {
       return { error: `Provide a value for {{${n}}}.` };
     }
-    parameters.push(value);
+    contentVariables[String(n)] = value;
     renderedBody = renderedBody.replace(`{{${n}}}`, value);
   }
 
   const admin = createAdminClient();
   const { data: credential } = await admin
     .from("whatsapp_credentials")
-    .select("phone_number_id, access_token")
+    .select("twilio_subaccount_sid, twilio_subaccount_auth_token, whatsapp_number_e164")
     .eq("clinic_id", patient.clinic_id)
     .maybeSingle();
   if (!credential) {
@@ -104,13 +84,12 @@ export async function sendTemplateMessage(
   }
 
   const result = await sendWhatsAppTemplateMessage({
-    phoneNumberId: credential.phone_number_id,
-    accessToken: credential.access_token,
+    subaccountSid: credential.twilio_subaccount_sid,
+    subaccountAuthToken: credential.twilio_subaccount_auth_token,
+    from: credential.whatsapp_number_e164,
     to: patient.whatsapp_number,
-    templateName: template.name,
-    languageCode: template.language,
-    parameters,
-    headerParameter,
+    contentSid: template.twilio_content_sid,
+    contentVariables,
   });
 
   // Template sends can start a brand-new conversation, so find-or-create

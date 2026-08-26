@@ -44,17 +44,6 @@ export function SendTemplateDialog({
     () => (selectedTemplate ? extractPlaceholders(selectedTemplate.body_text) : []),
     [selectedTemplate]
   );
-  const headerPlaceholders = useMemo(
-    () =>
-      selectedTemplate?.header_type === "text" && selectedTemplate.header_text
-        ? extractPlaceholders(selectedTemplate.header_text)
-        : [],
-    [selectedTemplate]
-  );
-  const unsupportedHeader =
-    selectedTemplate &&
-    ["image", "video", "document", "location"].includes(selectedTemplate.header_type);
-
   if (templates.length === 0) {
     return (
       <p className="text-xs text-muted-foreground">
@@ -107,26 +96,9 @@ export function SendTemplateDialog({
 
             {selectedTemplate && (
               <p className="rounded-md bg-muted p-2 text-xs text-muted-foreground">
-                {selectedTemplate.header_text && `${selectedTemplate.header_text}\n\n`}
                 {selectedTemplate.body_text}
-                {selectedTemplate.footer_text && `\n\n${selectedTemplate.footer_text}`}
               </p>
             )}
-
-            {unsupportedHeader && (
-              <p className="text-sm text-destructive">
-                This template has an image/video/document/location header,
-                which sending doesn&apos;t support yet. Choose a different
-                template.
-              </p>
-            )}
-
-            {headerPlaceholders.map((n) => (
-              <div key={`header_${n}`} className="flex flex-col gap-2">
-                <Label htmlFor="header_param">Header {`{{${n}}}`} value</Label>
-                <Input id="header_param" name="header_param" required />
-              </div>
-            ))}
 
             {placeholders.map((n) => (
               <div key={n} className="flex flex-col gap-2">
@@ -139,11 +111,7 @@ export function SendTemplateDialog({
               <p className="text-sm text-destructive">{state.error}</p>
             )}
 
-            <Button
-              type="submit"
-              disabled={pending || unsupportedHeader}
-              className="w-fit"
-            >
+            <Button type="submit" disabled={pending} className="w-fit">
               {pending ? "Sending..." : "Send"}
             </Button>
           </form>

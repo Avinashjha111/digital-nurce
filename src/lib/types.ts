@@ -37,6 +37,7 @@ export type Clinic = {
   payment_methods: string[] | null;
   services: string[] | null;
   departments: string[] | null;
+  activation_status: "pending_activation" | "active";
   created_by: string;
   created_at: string;
 };
@@ -184,7 +185,7 @@ export type WhatsappTemplate = {
   header_media_path: string | null;
   footer_text: string | null;
   buttons: WhatsappTemplateButton[];
-  meta_template_id: string | null;
+  twilio_content_sid: string | null;
   status: WhatsappTemplateStatus;
   rejection_reason: string | null;
   created_by: string;

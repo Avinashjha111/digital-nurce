@@ -1,14 +1,28 @@
-// Meta WhatsApp Cloud API: message template creation + status sync.
-// Server-only, same convention as provider.ts -- credentials are passed in,
-// never read from a global env var, since they're per-clinic.
+// Twilio Content API: message template creation + WhatsApp approval status
+// sync. Server-only, same convention as provider.ts -- credentials are
+// passed in, never read from a global env var, since each clinic's
+// templates belong to its own Twilio subaccount.
+//
+// Scope note: only plain text bodies + variables + quick-reply buttons +
+// URL/phone buttons are implemented, using field shapes confirmed directly
+// against Twilio's live Content API docs. Media headers, footer text, and
+// copy-code buttons are NOT implemented -- their exact Content API field
+// shapes aren't documented anywhere reachable, and guessing them risks
+// silently creating malformed templates. None of this blocks reminders/
+// follow-ups/bulk-send, which only ever need a plain text body with
+// variables. If you need one of the unsupported pieces, get a real
+// approved-template example from Twilio support/docs first.
 
-import { metaErrorMessage } from "./provider";
+const CONTENT_API_BASE = "https://content.twilio.com/v1/Content";
 
-const GRAPH_API_VERSION = "v21.0";
+function basicAuthHeader(accountSid: string, authToken: string): string {
+  return `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`;
+}
 
-export type CreateTemplateResult =
-  | { ok: true; metaTemplateId: string; status: string }
-  | { ok: false; error: string };
+function twilioApiErrorMessage(json: unknown, fallback: string): string {
+  const message = (json as { message?: string } | null)?.message;
+  return message ?? fallback;
+}
 
 /** Extracts {{1}}, {{2}}, ... in order of first appearance, de-duplicated. */
 export function extractPlaceholders(bodyText: string): number[] {
@@ -20,10 +34,9 @@ export function extractPlaceholders(bodyText: string): number[] {
 }
 
 /**
- * Meta rejects a template if a variable sits at the very start, or if
- * nothing but punctuation follows the last variable at the end (a lone "."
- * after {{2}} does NOT count as real trailing text to Meta's validator --
- * confirmed against the live API, not just documentation).
+ * WhatsApp (via Meta, which Twilio submits to under the hood) rejects a
+ * template if a variable sits at the very start, or if nothing but
+ * punctuation follows the last variable at the end.
  */
 export function hasLeadingOrTrailingVariable(text: string): boolean {
   const trimmed = text.trim();
@@ -36,120 +49,120 @@ export function hasLeadingOrTrailingVariable(text: string): boolean {
 export type TemplateButtonInput =
   | { type: "QUICK_REPLY"; text: string }
   | { type: "URL"; text: string; url: string }
-  | { type: "PHONE_NUMBER"; text: string; phoneNumber: string }
-  | { type: "COPY_CODE"; example: string };
+  | { type: "PHONE_NUMBER"; text: string; phoneNumber: string };
 
-export type TemplateHeaderInput =
-  | { type: "none" }
-  | { type: "text"; text: string; example?: string }
-  | { type: "image" | "video" | "document"; handle: string }
-  | { type: "location" };
+export type TemplateHeaderInput = { type: "none" } | { type: "text"; text: string; example?: string };
 
-function buildButtonComponent(buttons: TemplateButtonInput[]) {
-  return {
-    type: "BUTTONS",
-    buttons: buttons.map((b) => {
-      switch (b.type) {
-        case "QUICK_REPLY":
-          return { type: "QUICK_REPLY", text: b.text };
-        case "URL":
-          return { type: "URL", text: b.text, url: b.url };
-        case "PHONE_NUMBER":
-          return { type: "PHONE_NUMBER", text: b.text, phone_number: b.phoneNumber };
-        case "COPY_CODE":
-          return { type: "COPY_CODE", example: b.example };
-      }
-    }),
-  };
-}
-
-function buildHeaderComponent(header: TemplateHeaderInput) {
-  switch (header.type) {
-    case "none":
-      return null;
-    case "text": {
-      const component: Record<string, unknown> = {
-        type: "HEADER",
-        format: "TEXT",
-        text: header.text,
-      };
-      if (header.example) component.example = { header_text: [header.example] };
-      return component;
-    }
-    case "image":
-    case "video":
-    case "document":
-      return {
-        type: "HEADER",
-        format: header.type.toUpperCase(),
-        example: { header_handle: [header.handle] },
-      };
-    case "location":
-      return { type: "HEADER", format: "LOCATION" };
-  }
-}
+export type CreateTemplateResult =
+  | { ok: true; contentSid: string }
+  | { ok: false; error: string };
 
 export async function createWhatsAppTemplate({
-  wabaId,
-  accessToken,
+  subaccountSid,
+  subaccountAuthToken,
   name,
-  category,
   language,
   bodyText,
   examples,
-  header,
-  footerText,
   buttons,
 }: {
-  wabaId: string;
-  accessToken: string;
+  subaccountSid: string;
+  subaccountAuthToken: string;
   name: string;
-  category: "UTILITY" | "MARKETING" | "AUTHENTICATION";
   language: string;
   bodyText: string;
   examples: string[];
-  header: TemplateHeaderInput;
-  footerText: string | null;
   buttons: TemplateButtonInput[];
 }): Promise<CreateTemplateResult> {
-  const bodyComponent: Record<string, unknown> = {
-    type: "BODY",
-    text: bodyText,
-  };
-  if (examples.length > 0) {
-    bodyComponent.example = { body_text: [examples] };
+  const variables: Record<string, string> = {};
+  examples.forEach((value, i) => {
+    variables[String(i + 1)] = value;
+  });
+
+  const quickReplies = buttons.filter((b) => b.type === "QUICK_REPLY");
+  const ctaButtons = buttons.filter((b) => b.type === "URL" || b.type === "PHONE_NUMBER");
+  if (quickReplies.length > 0 && ctaButtons.length > 0) {
+    return {
+      ok: false,
+      error: "Mixing quick-reply buttons with URL/phone buttons in one template isn't supported.",
+    };
   }
 
-  const components: unknown[] = [];
-  const headerComponent = buildHeaderComponent(header);
-  if (headerComponent) components.push(headerComponent);
-  components.push(bodyComponent);
-  if (footerText) components.push({ type: "FOOTER", text: footerText });
-  if (buttons.length > 0) components.push(buildButtonComponent(buttons));
+  const types: Record<string, unknown> =
+    quickReplies.length > 0
+      ? {
+          "twilio/quick-reply": {
+            body: bodyText,
+            actions: quickReplies.map((b) => ({ title: b.text, id: b.text })),
+          },
+        }
+      : ctaButtons.length > 0
+        ? {
+            "twilio/card": {
+              title: bodyText,
+              actions: ctaButtons.map((b) =>
+                b.type === "URL"
+                  ? { type: "URL", title: b.text, url: b.url }
+                  : { type: "PHONE_NUMBER", title: b.text, phone: `+${b.phoneNumber}` }
+              ),
+            },
+          }
+        : { "twilio/text": { body: bodyText } };
 
-  const res = await fetch(
-    `https://graph.facebook.com/${GRAPH_API_VERSION}/${wabaId}/message_templates`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ name, category, language, components }),
-    }
-  );
+  const res = await fetch(CONTENT_API_BASE, {
+    method: "POST",
+    headers: {
+      Authorization: basicAuthHeader(subaccountSid, subaccountAuthToken),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      friendly_name: name,
+      language,
+      ...(Object.keys(variables).length > 0 ? { variables } : {}),
+      types,
+    }),
+  });
 
   const json = await res.json().catch(() => null);
-
   if (!res.ok) {
-    return { ok: false, error: metaErrorMessage(json, `Meta API error (${res.status})`) };
+    return { ok: false, error: twilioApiErrorMessage(json, `Twilio API error (${res.status})`) };
   }
 
-  return {
-    ok: true,
-    metaTemplateId: json.id,
-    status: (json.status ?? "PENDING").toLowerCase(),
-  };
+  return { ok: true, contentSid: json.sid };
+}
+
+export type SubmitApprovalResult =
+  | { ok: true; status: string }
+  | { ok: false; error: string };
+
+export async function submitTemplateForApproval({
+  subaccountSid,
+  subaccountAuthToken,
+  contentSid,
+  name,
+  category,
+}: {
+  subaccountSid: string;
+  subaccountAuthToken: string;
+  contentSid: string;
+  name: string;
+  category: "UTILITY" | "MARKETING" | "AUTHENTICATION";
+}): Promise<SubmitApprovalResult> {
+  const res = await fetch(`${CONTENT_API_BASE}/${contentSid}/ApprovalRequests/whatsapp`, {
+    method: "POST",
+    headers: {
+      Authorization: basicAuthHeader(subaccountSid, subaccountAuthToken),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ name, category }),
+  });
+
+  const json = await res.json().catch(() => null);
+  if (!res.ok) {
+    return { ok: false, error: twilioApiErrorMessage(json, `Twilio API error (${res.status})`) };
+  }
+
+  return { ok: true, status: (json.status ?? "received").toLowerCase() };
 }
 
 export type TemplateStatusResult =
@@ -157,77 +170,27 @@ export type TemplateStatusResult =
   | { ok: false; error: string };
 
 export async function fetchTemplateStatus({
-  metaTemplateId,
-  accessToken,
+  subaccountSid,
+  subaccountAuthToken,
+  contentSid,
 }: {
-  metaTemplateId: string;
-  accessToken: string;
+  subaccountSid: string;
+  subaccountAuthToken: string;
+  contentSid: string;
 }): Promise<TemplateStatusResult> {
-  const res = await fetch(
-    `https://graph.facebook.com/${GRAPH_API_VERSION}/${metaTemplateId}?fields=status,rejected_reason`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
-  );
+  const res = await fetch(`${CONTENT_API_BASE}/${contentSid}/ApprovalRequests`, {
+    headers: { Authorization: basicAuthHeader(subaccountSid, subaccountAuthToken) },
+  });
   const json = await res.json().catch(() => null);
 
   if (!res.ok) {
-    return { ok: false, error: metaErrorMessage(json, `Meta API error (${res.status})`) };
+    return { ok: false, error: twilioApiErrorMessage(json, `Twilio API error (${res.status})`) };
   }
 
+  const whatsapp = json?.whatsapp;
   return {
     ok: true,
-    status: (json.status ?? "PENDING").toLowerCase(),
-    rejectionReason: json.rejected_reason && json.rejected_reason !== "NONE" ? json.rejected_reason : null,
+    status: (whatsapp?.status ?? "pending").toLowerCase(),
+    rejectionReason: whatsapp?.rejection_reason || null,
   };
-}
-
-export type UploadMediaResult = { ok: true; handle: string } | { ok: false; error: string };
-
-/**
- * Meta's Resumable Upload API (three calls): open a session sized for this
- * exact file, push the bytes, get back a handle usable as a template
- * header's example.header_handle. Needs the Meta App ID, which is
- * unrelated to the WABA/phone number IDs used everywhere else here.
- */
-export async function uploadTemplateHeaderMedia({
-  appId,
-  accessToken,
-  fileBytes,
-  mimeType,
-}: {
-  appId: string;
-  accessToken: string;
-  fileBytes: Uint8Array;
-  mimeType: string;
-}): Promise<UploadMediaResult> {
-  const sessionRes = await fetch(
-    `https://graph.facebook.com/${GRAPH_API_VERSION}/${appId}/uploads?file_length=${fileBytes.length}&file_type=${encodeURIComponent(mimeType)}&access_token=${encodeURIComponent(accessToken)}`,
-    { method: "POST" }
-  );
-  const sessionJson = await sessionRes.json().catch(() => null);
-
-  if (!sessionRes.ok || !sessionJson?.id) {
-    return {
-      ok: false,
-      error: metaErrorMessage(sessionJson, `Could not start upload session (${sessionRes.status})`),
-    };
-  }
-
-  const uploadRes = await fetch(`https://graph.facebook.com/${GRAPH_API_VERSION}/${sessionJson.id}`, {
-    method: "POST",
-    headers: {
-      Authorization: `OAuth ${accessToken}`,
-      file_offset: "0",
-    },
-    body: fileBytes.slice().buffer as ArrayBuffer,
-  });
-  const uploadJson = await uploadRes.json().catch(() => null);
-
-  if (!uploadRes.ok || !uploadJson?.h) {
-    return {
-      ok: false,
-      error: metaErrorMessage(uploadJson, `Media upload failed (${uploadRes.status})`),
-    };
-  }
-
-  return { ok: true, handle: uploadJson.h };
 }

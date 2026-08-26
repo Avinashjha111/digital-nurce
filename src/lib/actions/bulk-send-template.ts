@@ -21,15 +21,14 @@ export type BulkSendResult = {
 // clinic's rate limit / message balance is respected across many
 // recipients -- mirrors the reminders/follow-ups cron loop pattern rather
 // than firing everything in parallel. {{1}} can be auto-filled with each
-// patient's own name; any other body/header variables are one shared value
-// typed once and reused for every recipient in this batch.
+// patient's own name; any other body variables are one shared value typed
+// once and reused for every recipient in this batch.
 export async function sendBulkTemplateMessages(
   clinicId: string,
   templateId: string,
   patientIds: string[],
   useNameForFirst: boolean,
-  bodyValues: Record<number, string>,
-  headerValue: string | undefined
+  bodyValues: Record<number, string>
 ): Promise<BulkSendResult> {
   const profile = await getCurrentProfile();
   if (!profile || profile.role !== "agency_admin") {
@@ -51,7 +50,7 @@ export async function sendBulkTemplateMessages(
 
   const { data: template } = await supabase
     .from("whatsapp_templates")
-    .select("id, clinic_id, name, language, body_text, status, header_type, header_text, category")
+    .select("id, clinic_id, twilio_content_sid, body_text, status, category")
     .eq("id", templateId)
     .eq("clinic_id", clinicId)
     .single();
@@ -61,26 +60,8 @@ export async function sendBulkTemplateMessages(
   if (template.status !== "approved") {
     return { error: "Only approved templates can be sent.", sent: 0, failed: [] };
   }
-  if (
-    template.header_type === "image" ||
-    template.header_type === "video" ||
-    template.header_type === "document" ||
-    template.header_type === "location"
-  ) {
-    return {
-      error:
-        "Sending templates with an image, video, document, or location header isn't supported yet -- use a text-only or no-header template.",
-      sent: 0,
-      failed: [],
-    };
-  }
-
-  const headerPlaceholders =
-    template.header_type === "text" && template.header_text
-      ? extractPlaceholders(template.header_text)
-      : [];
-  if (headerPlaceholders.length > 0 && !headerValue?.trim()) {
-    return { error: "Provide a value for the header variable.", sent: 0, failed: [] };
+  if (!template.twilio_content_sid) {
+    return { error: "This template has no Twilio content id -- recreate it.", sent: 0, failed: [] };
   }
 
   const bodyPlaceholders = extractPlaceholders(template.body_text);
@@ -103,7 +84,7 @@ export async function sendBulkTemplateMessages(
   const admin = createAdminClient();
   const { data: credential } = await admin
     .from("whatsapp_credentials")
-    .select("phone_number_id, access_token")
+    .select("twilio_subaccount_sid, twilio_subaccount_auth_token, whatsapp_number_e164")
     .eq("clinic_id", clinicId)
     .maybeSingle();
   if (!credential) {
@@ -127,22 +108,21 @@ export async function sendBulkTemplateMessages(
       continue;
     }
 
-    const parameters: string[] = [];
+    const contentVariables: Record<string, string> = {};
     let renderedBody = template.body_text;
     for (const n of bodyPlaceholders) {
       const value = n === 1 && useNameForFirst ? patient.name : bodyValues[n];
-      parameters.push(value);
+      contentVariables[String(n)] = value;
       renderedBody = renderedBody.replace(`{{${n}}}`, value);
     }
 
     const result = await sendWhatsAppTemplateMessage({
-      phoneNumberId: credential.phone_number_id,
-      accessToken: credential.access_token,
+      subaccountSid: credential.twilio_subaccount_sid,
+      subaccountAuthToken: credential.twilio_subaccount_auth_token,
+      from: credential.whatsapp_number_e164,
       to: patient.whatsapp_number,
-      templateName: template.name,
-      languageCode: template.language,
-      parameters,
-      headerParameter: headerValue?.trim() || undefined,
+      contentSid: template.twilio_content_sid,
+      contentVariables,
     });
 
     const { data: existingConversation } = await supabase

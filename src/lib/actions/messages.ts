@@ -93,7 +93,7 @@ export async function sendMessage(
   const admin = createAdminClient();
   const { data: credential } = await admin
     .from("whatsapp_credentials")
-    .select("phone_number_id, access_token")
+    .select("twilio_subaccount_sid, twilio_subaccount_auth_token, whatsapp_number_e164")
     .eq("clinic_id", conversation.clinic_id)
     .maybeSingle();
 
@@ -102,8 +102,9 @@ export async function sendMessage(
   }
 
   const result = await sendWhatsAppMessage({
-    phoneNumberId: credential.phone_number_id,
-    accessToken: credential.access_token,
+    subaccountSid: credential.twilio_subaccount_sid,
+    subaccountAuthToken: credential.twilio_subaccount_auth_token,
+    from: credential.whatsapp_number_e164,
     to: patient.whatsapp_number,
     body: parsed.data.body,
   });
@@ -210,7 +211,7 @@ export async function sendMediaMessage(
   const admin = createAdminClient();
   const { data: credential } = await admin
     .from("whatsapp_credentials")
-    .select("phone_number_id, access_token")
+    .select("twilio_subaccount_sid, twilio_subaccount_auth_token, whatsapp_number_e164")
     .eq("clinic_id", conversation.clinic_id)
     .maybeSingle();
 
@@ -219,8 +220,9 @@ export async function sendMediaMessage(
   }
 
   const result = await sendWhatsAppMediaMessage({
-    phoneNumberId: credential.phone_number_id,
-    accessToken: credential.access_token,
+    subaccountSid: credential.twilio_subaccount_sid,
+    subaccountAuthToken: credential.twilio_subaccount_auth_token,
+    from: credential.whatsapp_number_e164,
     to: patient.whatsapp_number,
     mediaType: input.mediaType,
     mediaUrl: input.mediaUrl,

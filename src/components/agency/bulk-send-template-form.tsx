@@ -38,7 +38,6 @@ export function BulkSendTemplateForm({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [useNameForFirst, setUseNameForFirst] = useState(true);
   const [bodyValues, setBodyValues] = useState<Record<number, string>>({});
-  const [headerValue, setHeaderValue] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<BulkSendResult | null>(null);
@@ -48,17 +47,6 @@ export function BulkSendTemplateForm({
     () => (selectedTemplate ? extractPlaceholders(selectedTemplate.body_text) : []),
     [selectedTemplate]
   );
-  const headerPlaceholders = useMemo(
-    () =>
-      selectedTemplate?.header_type === "text" && selectedTemplate.header_text
-        ? extractPlaceholders(selectedTemplate.header_text)
-        : [],
-    [selectedTemplate]
-  );
-  const unsupportedHeader =
-    selectedTemplate &&
-    ["image", "video", "document", "location"].includes(selectedTemplate.header_type);
-
   const filteredPatients = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return patients;
@@ -89,7 +77,6 @@ export function BulkSendTemplateForm({
   }
 
   function missingValue() {
-    if (headerPlaceholders.length > 0 && !headerValue.trim()) return true;
     return bodyPlaceholders.some((n) => {
       if (n === 1 && useNameForFirst) return false;
       return !bodyValues[n]?.trim();
@@ -104,8 +91,7 @@ export function BulkSendTemplateForm({
         templateId,
         [...selected],
         useNameForFirst,
-        bodyValues,
-        headerPlaceholders.length > 0 ? headerValue : undefined
+        bodyValues
       );
       setResult(outcome);
       setConfirming(false);
@@ -120,7 +106,6 @@ export function BulkSendTemplateForm({
     setResult(null);
     setConfirming(false);
     setBodyValues({});
-    setHeaderValue("");
     setUseNameForFirst(true);
   }
 
@@ -235,29 +220,9 @@ export function BulkSendTemplateForm({
 
           {selectedTemplate && (
             <p className="max-w-lg rounded-md bg-muted p-2 text-xs whitespace-pre-line text-muted-foreground">
-              {selectedTemplate.header_text && `${selectedTemplate.header_text}\n\n`}
               {selectedTemplate.body_text}
-              {selectedTemplate.footer_text && `\n\n${selectedTemplate.footer_text}`}
             </p>
           )}
-
-          {unsupportedHeader && (
-            <p className="text-sm text-destructive">
-              This template has an image/video/document/location header, which sending
-              doesn&apos;t support yet. Choose a different template.
-            </p>
-          )}
-
-          {headerPlaceholders.map((n) => (
-            <div key={`header_${n}`} className="flex max-w-sm flex-col gap-2">
-              <Label htmlFor="header_param">Header {`{{${n}}}`} value (same for everyone)</Label>
-              <Input
-                id="header_param"
-                value={headerValue}
-                onChange={(e) => setHeaderValue(e.target.value)}
-              />
-            </div>
-          ))}
 
           {bodyPlaceholders.map((n) =>
             n === 1 ? (
@@ -346,7 +311,7 @@ export function BulkSendTemplateForm({
       <Button
         type="button"
         className="w-fit"
-        disabled={selected.size === 0 || unsupportedHeader || missingValue()}
+        disabled={selected.size === 0 || missingValue()}
         onClick={() => setConfirming(true)}
       >
         <Send className="size-4" />

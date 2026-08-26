@@ -9,9 +9,8 @@ import {
   createWhatsAppTemplate,
   extractPlaceholders,
   fetchTemplateStatus,
-  uploadTemplateHeaderMedia,
+  submitTemplateForApproval,
   type TemplateButtonInput,
-  type TemplateHeaderInput,
 } from "@/lib/whatsapp/templates";
 
 export type CreateTemplateState = { error: string | null; success?: boolean };
@@ -27,7 +26,6 @@ const templateSchema = z.object({
   body_text: z.string().trim().min(1, "Template body is required"),
   header_type: z.enum(["none", "text", "image", "video", "document", "location"]),
   header_text: z.string().trim().optional(),
-  header_media_path: z.string().trim().optional(),
   footer_text: z.string().trim().optional(),
 });
 
@@ -39,7 +37,6 @@ const buttonSchema = z.discriminatedUnion("type", [
     text: z.string().trim().min(1).max(25),
     phoneNumber: z.string().trim().min(1),
   }),
-  z.object({ type: z.literal("COPY_CODE"), example: z.string().trim().min(1) }),
 ]);
 
 export async function createTemplate(
@@ -69,12 +66,25 @@ export async function createTemplate(
     body_text: formData.get("body_text"),
     header_type: formData.get("header_type") || "none",
     header_text: formData.get("header_text") || undefined,
-    header_media_path: formData.get("header_media_path") || undefined,
     footer_text: formData.get("footer_text") || undefined,
   });
 
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+
+  // Twilio's Content API field shapes for these aren't confirmed anywhere
+  // reachable -- rather than guess and risk a malformed template, they're
+  // blocked here with a clear message. Nothing the app sends automatically
+  // (reminders/follow-ups/bulk-send) needs any of these.
+  if (parsed.data.header_type === "image" || parsed.data.header_type === "video" || parsed.data.header_type === "document") {
+    return { error: "Media headers aren't supported yet -- use a text-only or no-header template." };
+  }
+  if (parsed.data.header_type === "location") {
+    return { error: "Location headers aren't supported yet." };
+  }
+  if (parsed.data.footer_text) {
+    return { error: "Footer text isn't supported yet -- leave it blank." };
   }
 
   let buttons: TemplateButtonInput[] = [];
@@ -83,20 +93,11 @@ export async function createTemplate(
     const parsedButtons = JSON.parse(buttonsRaw);
     const validated = z.array(buttonSchema).safeParse(parsedButtons);
     if (!validated.success) {
-      return { error: "One of the buttons is missing required fields." };
+      return { error: "One of the buttons is missing required fields, or uses an unsupported type (copy-code buttons aren't supported yet)." };
     }
     buttons = validated.data;
   } catch {
     return { error: "Invalid button data." };
-  }
-
-  if (
-    (parsed.data.header_type === "image" ||
-      parsed.data.header_type === "video" ||
-      parsed.data.header_type === "document") &&
-    !parsed.data.header_media_path
-  ) {
-    return { error: "Upload a sample file for the media header first." };
   }
 
   const supabase = await createClient();
@@ -112,90 +113,50 @@ export async function createTemplate(
     return { error: "Clinic not found or you do not own it." };
   }
 
-  // Credentials (including waba_id/meta_app_id) are only readable via the
-  // service-role client -- same reasoning as sendMessage/processPrescription.
+  // Credentials are only readable via the service-role client -- same
+  // reasoning as sendMessage/processPrescription.
   const admin = createAdminClient();
   const { data: credential } = await admin
     .from("whatsapp_credentials")
-    .select("waba_id, access_token, meta_app_id")
+    .select("twilio_subaccount_sid, twilio_subaccount_auth_token")
     .eq("clinic_id", clinicId)
     .maybeSingle();
 
   if (!credential) {
     return { error: "This clinic has not connected WhatsApp yet." };
   }
-  if (!credential.waba_id) {
+
+  if (parsed.data.header_type === "text" && parsed.data.header_text) {
     return {
       error:
-        "This clinic's WhatsApp connection is missing a WhatsApp Business Account ID. Reconnect WhatsApp with it filled in first.",
+        "Text headers aren't supported yet on Twilio -- put everything in the body text for now.",
     };
   }
 
-  let header: TemplateHeaderInput = { type: "none" };
-
-  if (parsed.data.header_type === "text" && parsed.data.header_text) {
-    const headerPlaceholders = extractPlaceholders(parsed.data.header_text);
-    const headerExample =
-      headerPlaceholders.length > 0
-        ? String(formData.get("header_example") ?? "").trim()
-        : undefined;
-    if (headerPlaceholders.length > 0 && !headerExample) {
-      return { error: "Provide an example value for the header variable." };
-    }
-    header = { type: "text", text: parsed.data.header_text, example: headerExample };
-  } else if (
-    (parsed.data.header_type === "image" ||
-      parsed.data.header_type === "video" ||
-      parsed.data.header_type === "document") &&
-    parsed.data.header_media_path
-  ) {
-    if (!credential.meta_app_id) {
-      return {
-        error:
-          "Media headers need a Meta App ID saved on this clinic's WhatsApp connection. Reconnect WhatsApp with it filled in first.",
-      };
-    }
-
-    const { data: fileBlob, error: downloadError } = await admin.storage
-      .from("template-media")
-      .download(parsed.data.header_media_path);
-
-    if (downloadError || !fileBlob) {
-      return { error: downloadError?.message ?? "Could not read the uploaded header media." };
-    }
-
-    const arrayBuffer = await fileBlob.arrayBuffer();
-    const uploadResult = await uploadTemplateHeaderMedia({
-      appId: credential.meta_app_id,
-      accessToken: credential.access_token,
-      fileBytes: new Uint8Array(arrayBuffer),
-      mimeType: fileBlob.type || "application/octet-stream",
-    });
-
-    if (!uploadResult.ok) {
-      return { error: `Could not upload header media to Meta: ${uploadResult.error}` };
-    }
-
-    header = { type: parsed.data.header_type, handle: uploadResult.handle };
-  } else if (parsed.data.header_type === "location") {
-    header = { type: "location" };
-  }
-
-  const result = await createWhatsAppTemplate({
-    wabaId: credential.waba_id,
-    accessToken: credential.access_token,
+  const createResult = await createWhatsAppTemplate({
+    subaccountSid: credential.twilio_subaccount_sid,
+    subaccountAuthToken: credential.twilio_subaccount_auth_token,
     name: parsed.data.name,
-    category: parsed.data.category.toUpperCase() as "UTILITY" | "MARKETING" | "AUTHENTICATION",
     language: parsed.data.language,
     bodyText: parsed.data.body_text,
     examples,
-    header,
-    footerText: parsed.data.footer_text || null,
     buttons,
   });
 
-  if (!result.ok) {
-    return { error: `Meta rejected the template: ${result.error}` };
+  if (!createResult.ok) {
+    return { error: `Twilio rejected the template: ${createResult.error}` };
+  }
+
+  const approvalResult = await submitTemplateForApproval({
+    subaccountSid: credential.twilio_subaccount_sid,
+    subaccountAuthToken: credential.twilio_subaccount_auth_token,
+    contentSid: createResult.contentSid,
+    name: parsed.data.name,
+    category: parsed.data.category.toUpperCase() as "UTILITY" | "MARKETING" | "AUTHENTICATION",
+  });
+
+  if (!approvalResult.ok) {
+    return { error: `Could not submit for WhatsApp approval: ${approvalResult.error}` };
   }
 
   const { error: insertError } = await supabase.from("whatsapp_templates").insert({
@@ -204,13 +165,13 @@ export async function createTemplate(
     category: parsed.data.category,
     language: parsed.data.language,
     body_text: parsed.data.body_text,
-    header_type: parsed.data.header_type,
-    header_text: parsed.data.header_text || null,
-    header_media_path: parsed.data.header_media_path || null,
-    footer_text: parsed.data.footer_text || null,
+    header_type: "none",
+    header_text: null,
+    header_media_path: null,
+    footer_text: null,
     buttons,
-    meta_template_id: result.metaTemplateId,
-    status: result.status,
+    twilio_content_sid: createResult.contentSid,
+    status: approvalResult.status,
     created_by: profile.id,
   });
 
@@ -230,24 +191,25 @@ export async function refreshTemplateStatus(templateId: string) {
 
   const { data: template } = await supabase
     .from("whatsapp_templates")
-    .select("id, clinic_id, meta_template_id")
+    .select("id, clinic_id, twilio_content_sid")
     .eq("id", templateId)
     .single();
 
-  if (!template?.meta_template_id) return;
+  if (!template?.twilio_content_sid) return;
 
   const admin = createAdminClient();
   const { data: credential } = await admin
     .from("whatsapp_credentials")
-    .select("access_token")
+    .select("twilio_subaccount_sid, twilio_subaccount_auth_token")
     .eq("clinic_id", template.clinic_id)
     .maybeSingle();
 
   if (!credential) return;
 
   const result = await fetchTemplateStatus({
-    metaTemplateId: template.meta_template_id,
-    accessToken: credential.access_token,
+    subaccountSid: credential.twilio_subaccount_sid,
+    subaccountAuthToken: credential.twilio_subaccount_auth_token,
+    contentSid: template.twilio_content_sid,
   });
 
   if (!result.ok) return;

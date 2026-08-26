@@ -2,7 +2,6 @@
 
 import { useActionState, useMemo, useRef, useState } from "react";
 import { Bold, CheckCircle2, Italic, Plus, Strikethrough, Trash2, Variable } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import { createTemplate, type CreateTemplateState } from "@/lib/actions/templates";
 import { extractPlaceholders, hasLeadingOrTrailingVariable } from "@/lib/whatsapp/templates";
 import { Button } from "@/components/ui/button";
@@ -28,6 +27,11 @@ import {
 } from "@/components/ui/dialog";
 import type { WhatsappTemplateButton } from "@/lib/types";
 
+// Excludes COPY_CODE -- Twilio's Content API field shape for it isn't
+// documented anywhere reachable, so it's not offered here (see
+// src/lib/whatsapp/templates.ts for the same restriction server-side).
+type CreatableButton = Exclude<WhatsappTemplateButton, { type: "COPY_CODE" }>;
+
 const initialState: CreateTemplateState = { error: null };
 
 const LANGUAGES = [
@@ -36,29 +40,13 @@ const LANGUAGES = [
   { value: "hi", label: "Hindi" },
 ];
 
-const HEADER_TYPES = [
-  { value: "none", label: "None" },
-  { value: "text", label: "Text" },
-  { value: "image", label: "Image" },
-  { value: "video", label: "Video" },
-  { value: "document", label: "Document" },
-  { value: "location", label: "Location" },
-];
-
-const MEDIA_ACCEPT: Record<string, string> = {
-  image: "image/jpeg,image/png",
-  video: "video/mp4,video/3gpp",
-  document: "application/pdf",
-};
-
 const BUTTON_TYPES = [
   { value: "QUICK_REPLY", label: "Quick Reply" },
   { value: "URL", label: "Visit Website" },
   { value: "PHONE_NUMBER", label: "Call Phone Number" },
-  { value: "COPY_CODE", label: "Copy Offer Code" },
 ];
 
-function emptyButton(type: WhatsappTemplateButton["type"]): WhatsappTemplateButton {
+function emptyButton(type: CreatableButton["type"]): CreatableButton {
   switch (type) {
     case "QUICK_REPLY":
       return { type, text: "" };
@@ -66,8 +54,6 @@ function emptyButton(type: WhatsappTemplateButton["type"]): WhatsappTemplateButt
       return { type, text: "", url: "" };
     case "PHONE_NUMBER":
       return { type, text: "", phoneNumber: "" };
-    case "COPY_CODE":
-      return { type, example: "" };
   }
 }
 
@@ -78,17 +64,7 @@ export function CreateTemplateDialog({ clinicId }: { clinicId: string }) {
   const [category, setCategory] = useState("utility");
   const [language, setLanguage] = useState("en_US");
 
-  const [headerType, setHeaderType] = useState("none");
-  const [headerText, setHeaderText] = useState("");
-  const [headerExample, setHeaderExample] = useState("");
-  const [headerMediaPath, setHeaderMediaPath] = useState("");
-  const [headerUploadState, setHeaderUploadState] = useState<
-    "idle" | "uploading" | "done" | "error"
-  >("idle");
-  const [headerUploadError, setHeaderUploadError] = useState<string | null>(null);
-
-  const [footerText, setFooterText] = useState("");
-  const [buttons, setButtons] = useState<WhatsappTemplateButton[]>([]);
+  const [buttons, setButtons] = useState<CreatableButton[]>([]);
   const [bodyExamples, setBodyExamples] = useState<Record<number, string>>({});
 
   const bodyTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -97,14 +73,9 @@ export function CreateTemplateDialog({ clinicId }: { clinicId: string }) {
   const [state, formAction, pending] = useActionState(boundAction, initialState);
 
   const bodyPlaceholders = useMemo(() => extractPlaceholders(bodyText), [bodyText]);
-  const headerPlaceholders = useMemo(() => extractPlaceholders(headerText), [headerText]);
   const bodyHasBadVariablePlacement = useMemo(
     () => hasLeadingOrTrailingVariable(bodyText),
     [bodyText]
-  );
-  const headerHasBadVariablePlacement = useMemo(
-    () => hasLeadingOrTrailingVariable(headerText),
-    [headerText]
   );
 
   // Wraps the selected text in the body textarea with a marker (or drops
@@ -142,34 +113,7 @@ export function CreateTemplateDialog({ clinicId }: { clinicId: string }) {
     });
   }
 
-  async function handleHeaderFileChange(file: File | null) {
-    setHeaderMediaPath("");
-    setHeaderUploadError(null);
-    if (!file) return;
-
-    setHeaderUploadState("uploading");
-    try {
-      const supabase = createClient();
-      const ext = file.name.split(".").pop();
-      const path = `${clinicId}/${crypto.randomUUID()}.${ext}`;
-      const { error } = await supabase.storage
-        .from("template-media")
-        .upload(path, file, { contentType: file.type });
-
-      if (error) {
-        setHeaderUploadState("error");
-        setHeaderUploadError(error.message);
-        return;
-      }
-      setHeaderMediaPath(path);
-      setHeaderUploadState("done");
-    } catch {
-      setHeaderUploadState("error");
-      setHeaderUploadError("Upload failed.");
-    }
-  }
-
-  function updateButton(index: number, next: WhatsappTemplateButton) {
+  function updateButton(index: number, next: CreatableButton) {
     setButtons((prev) => prev.map((b, i) => (i === index ? next : b)));
   }
 
@@ -184,7 +128,7 @@ export function CreateTemplateDialog({ clinicId }: { clinicId: string }) {
         <DialogHeader>
           <DialogTitle>Create WhatsApp Template</DialogTitle>
           <DialogDescription>
-            Submitted to Meta for approval (usually minutes to a day). Use{" "}
+            Submitted for WhatsApp approval (usually minutes to a day). Use{" "}
             {"{{1}}"}, {"{{2}}"} etc. for variables filled in at send time.
           </DialogDescription>
         </DialogHeader>
@@ -193,7 +137,7 @@ export function CreateTemplateDialog({ clinicId }: { clinicId: string }) {
           <div className="flex flex-col items-center gap-3 py-4 text-center">
             <CheckCircle2 className="h-8 w-8 text-primary" />
             <p className="text-sm">
-              Template submitted to Meta. Check back for approval status.
+              Template submitted for approval. Check back for status.
             </p>
             <DialogClose render={<Button />}>Done</DialogClose>
           </div>
@@ -253,83 +197,6 @@ export function CreateTemplateDialog({ clinicId }: { clinicId: string }) {
                 </Select>
                 <input type="hidden" name="language" value={language} />
               </div>
-            </div>
-
-            {/* Header */}
-            <div className="flex flex-col gap-2 rounded-md border p-3">
-              <Label>Header (optional)</Label>
-              <Select value={headerType} onValueChange={(v) => setHeaderType(v ?? "none")}>
-                <SelectTrigger className="w-full">
-                  <SelectValue>
-                    {() => HEADER_TYPES.find((h) => h.value === headerType)?.label}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {HEADER_TYPES.map((h) => (
-                    <SelectItem key={h.value} value={h.value}>
-                      {h.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <input type="hidden" name="header_type" value={headerType} />
-
-              {headerType === "text" && (
-                <>
-                  <Input
-                    name="header_text"
-                    placeholder="Add a short line of text (max 60 chars)"
-                    maxLength={60}
-                    value={headerText}
-                    onChange={(e) => setHeaderText(e.target.value)}
-                  />
-                  {headerHasBadVariablePlacement && (
-                    <p className="text-xs text-destructive">
-                      Meta will reject this: a variable can&apos;t be right at
-                      the start or end (punctuation alone after it doesn&apos;t
-                      count as text). Add a real word after/before it.
-                    </p>
-                  )}
-                  {headerPlaceholders.length > 0 && (
-                    <Input
-                      name="header_example"
-                      placeholder="Example value for the header's {{1}}"
-                      value={headerExample}
-                      onChange={(e) => setHeaderExample(e.target.value)}
-                      required
-                    />
-                  )}
-                </>
-              )}
-
-              {(headerType === "image" || headerType === "video" || headerType === "document") && (
-                <div className="flex flex-col gap-1.5">
-                  <Input
-                    type="file"
-                    accept={MEDIA_ACCEPT[headerType]}
-                    onChange={(e) => handleHeaderFileChange(e.target.files?.[0] ?? null)}
-                  />
-                  {headerUploadState === "uploading" && (
-                    <p className="text-xs text-muted-foreground">Uploading sample...</p>
-                  )}
-                  {headerUploadState === "done" && (
-                    <p className="text-xs text-primary">Sample uploaded.</p>
-                  )}
-                  {headerUploadState === "error" && (
-                    <p className="text-xs text-destructive">{headerUploadError}</p>
-                  )}
-                  <input type="hidden" name="header_media_path" value={headerMediaPath} />
-                  <p className="text-xs text-muted-foreground">
-                    Needs a Meta App ID saved on this clinic&apos;s WhatsApp connection.
-                  </p>
-                </div>
-              )}
-
-              {headerType === "location" && (
-                <p className="text-xs text-muted-foreground">
-                  The patient&apos;s conversation will show a location pin; no sample needed.
-                </p>
-              )}
             </div>
 
             <div className="flex flex-col gap-2">
@@ -409,19 +276,6 @@ export function CreateTemplateDialog({ clinicId }: { clinicId: string }) {
               </div>
             )}
 
-            {/* Footer */}
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="footer_text">Footer (optional)</Label>
-              <Input
-                id="footer_text"
-                name="footer_text"
-                placeholder="Add a short line of text (max 60 chars)"
-                maxLength={60}
-                value={footerText}
-                onChange={(e) => setFooterText(e.target.value)}
-              />
-            </div>
-
             {/* Buttons */}
             <div className="flex flex-col gap-2 rounded-md border p-3">
               <div className="flex items-center justify-between">
@@ -430,7 +284,7 @@ export function CreateTemplateDialog({ clinicId }: { clinicId: string }) {
                   <Select
                     value=""
                     onValueChange={(v) => {
-                      if (v) setButtons((prev) => [...prev, emptyButton(v as WhatsappTemplateButton["type"])]);
+                      if (v) setButtons((prev) => [...prev, emptyButton(v as CreatableButton["type"])]);
                     }}
                   >
                     <SelectTrigger size="sm">
@@ -466,20 +320,12 @@ export function CreateTemplateDialog({ clinicId }: { clinicId: string }) {
                     </Button>
                   </div>
 
-                  {button.type === "COPY_CODE" ? (
-                    <Input
-                      placeholder="Sample offer code, e.g. SAVE20"
-                      value={button.example}
-                      onChange={(e) => updateButton(index, { ...button, example: e.target.value })}
-                    />
-                  ) : (
-                    <Input
-                      placeholder="Button label"
-                      maxLength={25}
-                      value={button.text}
-                      onChange={(e) => updateButton(index, { ...button, text: e.target.value })}
-                    />
-                  )}
+                  <Input
+                    placeholder="Button label"
+                    maxLength={25}
+                    value={button.text}
+                    onChange={(e) => updateButton(index, { ...button, text: e.target.value })}
+                  />
 
                   {button.type === "URL" && (
                     <Input
@@ -508,27 +354,22 @@ export function CreateTemplateDialog({ clinicId }: { clinicId: string }) {
 
             <Button
               type="submit"
-              disabled={
-                pending ||
-                headerUploadState === "uploading" ||
-                bodyHasBadVariablePlacement ||
-                headerHasBadVariablePlacement
-              }
+              disabled={pending || bodyHasBadVariablePlacement}
               className="w-fit"
             >
-              {pending ? "Submitting..." : "Submit to Meta"}
+              {pending ? "Submitting..." : "Submit for Approval"}
             </Button>
             </div>
 
             <div className="lg:sticky lg:top-0">
               <p className="mb-2 text-xs font-medium text-muted-foreground uppercase">Preview</p>
               <TemplatePreview
-                headerType={headerType}
-                headerText={headerText}
-                headerExample={headerExample}
+                headerType="none"
+                headerText=""
+                headerExample=""
                 bodyText={bodyText}
                 bodyExamples={bodyExamples}
-                footerText={footerText}
+                footerText=""
                 buttons={buttons}
               />
             </div>

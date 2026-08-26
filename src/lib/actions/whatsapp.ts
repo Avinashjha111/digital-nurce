@@ -5,21 +5,41 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentProfile } from "@/lib/supabase/profile";
-import { verifyWhatsAppCredentials } from "@/lib/whatsapp/provider";
+import { normalizePhone } from "@/lib/phone";
+import { createClinicSubaccount } from "@/lib/twilio/subaccounts";
+import { registerSender, getSenderStatus, verifySenderOtp } from "@/lib/twilio/senders";
 
-export type ConnectWhatsAppState = { error: string | null; success?: boolean };
+export type ConnectWhatsAppState = {
+  error: string | null;
+  success?: boolean;
+  senderStatus?: string;
+};
 
 const connectSchema = z.object({
-  phone_number_id: z.string().trim().min(1, "Phone Number ID is required"),
-  access_token: z.string().trim().min(1, "Access token is required"),
   waba_id: z.string().trim().min(1, "WhatsApp Business Account ID is required"),
-  meta_app_id: z.string().trim().optional(),
+  phone_e164: z
+    .string()
+    .trim()
+    .min(1, "WhatsApp number is required")
+    .transform(normalizePhone)
+    .refine((v) => v.length >= 10, "Enter a valid WhatsApp number with country code"),
 });
 
+export type ConnectWhatsAppInput = { wabaId: string; phoneE164: string };
+
+// Twilio ISV / Embedded Signup connect flow: the browser side (see
+// ConnectWhatsAppDialog) runs Facebook's Embedded Signup popup and hands
+// us back { waba_id } from its FINISH postMessage event, plus the clinic's
+// WhatsApp number collected as a plain form field (Twilio's own guidance:
+// Embedded Signup alone doesn't guarantee the E.164 number in the exact
+// shape the Senders API needs). This creates a dedicated Twilio subaccount
+// for the clinic, then registers that number as a WhatsApp Sender under it.
+// Registration is asynchronous on Twilio's side -- this returns whatever
+// status Twilio gives immediately, and checkWhatsAppSenderStatus() below
+// is what the UI polls with until it reaches "ONLINE".
 export async function connectWhatsApp(
   clinicId: string,
-  _prevState: ConnectWhatsAppState,
-  formData: FormData
+  input: ConnectWhatsAppInput
 ): Promise<ConnectWhatsAppState> {
   const profile = await getCurrentProfile();
   if (!profile || profile.role !== "agency_admin") {
@@ -27,10 +47,8 @@ export async function connectWhatsApp(
   }
 
   const parsed = connectSchema.safeParse({
-    phone_number_id: formData.get("phone_number_id"),
-    access_token: formData.get("access_token"),
-    waba_id: formData.get("waba_id"),
-    meta_app_id: formData.get("meta_app_id"),
+    waba_id: input.wabaId,
+    phone_e164: input.phoneE164,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
@@ -42,7 +60,7 @@ export async function connectWhatsApp(
   // returns nothing if the clinic doesn't exist or isn't theirs.
   const { data: clinic } = await supabase
     .from("clinics")
-    .select("id")
+    .select("id, name, activation_status")
     .eq("id", clinicId)
     .single();
 
@@ -50,13 +68,26 @@ export async function connectWhatsApp(
     return { error: "Clinic not found or you do not own it." };
   }
 
-  const verification = await verifyWhatsAppCredentials({
-    phoneNumberId: parsed.data.phone_number_id,
-    accessToken: parsed.data.access_token,
-  });
+  // Defense-in-depth: the UI already hides this behind the pending-activation
+  // blur, but a self-signed-up clinic that hasn't paid yet must not be able
+  // to get WhatsApp connected server-side either.
+  if (clinic.activation_status === "pending_activation") {
+    return { error: "Activate this clinic (send a payment link) before connecting WhatsApp." };
+  }
 
-  if (!verification.ok) {
-    return { error: `Could not verify with WhatsApp: ${verification.error}` };
+  const subaccount = await createClinicSubaccount(clinic.name);
+  if (!subaccount.ok) {
+    return { error: `Could not create Twilio subaccount: ${subaccount.error}` };
+  }
+
+  const sender = await registerSender({
+    subaccountSid: subaccount.sid,
+    subaccountAuthToken: subaccount.authToken,
+    wabaId: parsed.data.waba_id,
+    phoneE164: parsed.data.phone_e164,
+  });
+  if (!sender.ok) {
+    return { error: `Could not register WhatsApp sender: ${sender.error}` };
   }
 
   // Secrets go through the admin client only -- the caller's own session has
@@ -64,10 +95,12 @@ export async function connectWhatsApp(
   const admin = createAdminClient();
   const { error: credError } = await admin.from("whatsapp_credentials").upsert({
     clinic_id: clinicId,
-    phone_number_id: parsed.data.phone_number_id,
-    access_token: parsed.data.access_token,
+    twilio_subaccount_sid: subaccount.sid,
+    twilio_subaccount_auth_token: subaccount.authToken,
+    twilio_sender_sid: sender.sender.sid,
+    whatsapp_number_e164: parsed.data.phone_e164,
     waba_id: parsed.data.waba_id,
-    meta_app_id: parsed.data.meta_app_id || null,
+    sender_status: sender.sender.status,
     updated_at: new Date().toISOString(),
   });
 
@@ -75,17 +108,18 @@ export async function connectWhatsApp(
     if (credError.code === "23505") {
       return {
         error:
-          "This WhatsApp phone number is already connected to a different clinic. Each clinic needs its own number -- disconnect it from the other clinic first if this was a mistake.",
+          "This WhatsApp number is already connected to a different clinic. Each clinic needs its own number.",
       };
     }
     return { error: `Failed to store credentials: ${credError.message}` };
   }
 
+  const online = sender.sender.status.toUpperCase() === "ONLINE";
   const { error: updateError } = await supabase
     .from("clinics")
     .update({
-      whatsapp_status: "connected",
-      whatsapp_number: verification.displayNumber,
+      whatsapp_status: online ? "connected" : "not_connected",
+      whatsapp_number: `+${parsed.data.phone_e164}`,
       whatsapp_last_checked_at: new Date().toISOString(),
     })
     .eq("id", clinicId);
@@ -95,7 +129,99 @@ export async function connectWhatsApp(
   }
 
   revalidatePath(`/agency/clinics/${clinicId}`);
-  return { error: null, success: true };
+  return { error: null, success: true, senderStatus: sender.sender.status };
+}
+
+export type SenderStatusState = { error: string | null; senderStatus?: string };
+
+// Twilio registers a Sender asynchronously -- this is what the "Check
+// status" button in the connect UI calls to re-poll and flip the clinic
+// over to 'connected' once Twilio reports "ONLINE".
+export async function checkWhatsAppSenderStatus(clinicId: string): Promise<SenderStatusState> {
+  const profile = await getCurrentProfile();
+  if (!profile || profile.role !== "agency_admin") {
+    return { error: "Only agency admins can check WhatsApp status." };
+  }
+
+  const admin = createAdminClient();
+  const { data: credential } = await admin
+    .from("whatsapp_credentials")
+    .select("twilio_subaccount_sid, twilio_subaccount_auth_token, twilio_sender_sid")
+    .eq("clinic_id", clinicId)
+    .maybeSingle();
+
+  if (!credential?.twilio_sender_sid) {
+    return { error: "This clinic has not started connecting WhatsApp yet." };
+  }
+
+  const sender = await getSenderStatus({
+    subaccountSid: credential.twilio_subaccount_sid,
+    subaccountAuthToken: credential.twilio_subaccount_auth_token,
+    senderSid: credential.twilio_sender_sid,
+  });
+  if (!sender.ok) {
+    return { error: sender.error };
+  }
+
+  await admin
+    .from("whatsapp_credentials")
+    .update({ sender_status: sender.sender.status, updated_at: new Date().toISOString() })
+    .eq("clinic_id", clinicId);
+
+  const online = sender.sender.status.toUpperCase() === "ONLINE";
+  const supabase = await createClient();
+  await supabase
+    .from("clinics")
+    .update({
+      whatsapp_status: online ? "connected" : "not_connected",
+      whatsapp_last_checked_at: new Date().toISOString(),
+    })
+    .eq("id", clinicId);
+
+  revalidatePath(`/agency/clinics/${clinicId}`);
+  return { error: null, senderStatus: sender.sender.status };
+}
+
+// Only needed if Twilio's response after registerSender() asks for phone
+// verification -- built defensively since it's unclear from available docs
+// whether this step is always required.
+export async function submitWhatsAppSenderOtp(
+  clinicId: string,
+  code: string
+): Promise<SenderStatusState> {
+  const profile = await getCurrentProfile();
+  if (!profile || profile.role !== "agency_admin") {
+    return { error: "Only agency admins can verify WhatsApp." };
+  }
+
+  const admin = createAdminClient();
+  const { data: credential } = await admin
+    .from("whatsapp_credentials")
+    .select("twilio_subaccount_sid, twilio_subaccount_auth_token, twilio_sender_sid")
+    .eq("clinic_id", clinicId)
+    .maybeSingle();
+
+  if (!credential?.twilio_sender_sid) {
+    return { error: "This clinic has not started connecting WhatsApp yet." };
+  }
+
+  const sender = await verifySenderOtp({
+    subaccountSid: credential.twilio_subaccount_sid,
+    subaccountAuthToken: credential.twilio_subaccount_auth_token,
+    senderSid: credential.twilio_sender_sid,
+    verificationCode: code,
+  });
+  if (!sender.ok) {
+    return { error: sender.error };
+  }
+
+  await admin
+    .from("whatsapp_credentials")
+    .update({ sender_status: sender.sender.status, updated_at: new Date().toISOString() })
+    .eq("clinic_id", clinicId);
+
+  revalidatePath(`/agency/clinics/${clinicId}`);
+  return { error: null, senderStatus: sender.sender.status };
 }
 
 export type SetReminderTemplateResult = { error: string | null };

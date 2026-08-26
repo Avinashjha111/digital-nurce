@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
       .in("id", clinicIds),
     admin
       .from("whatsapp_credentials")
-      .select("clinic_id, phone_number_id, access_token")
+      .select("clinic_id, twilio_subaccount_sid, twilio_subaccount_auth_token, whatsapp_number_e164")
       .in("clinic_id", clinicIds),
   ]);
 
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
     templateIds.length > 0
       ? await admin
           .from("whatsapp_templates")
-          .select("id, name, language, body_text, header_type, header_text, status, category")
+          .select("id, twilio_content_sid, body_text, status, category")
           .in("id", templateIds)
       : { data: [] };
 
@@ -118,17 +118,19 @@ async function sendOne(
   clinicById: Map<string, { id: string; reminder_template_id: string | null }>,
   credentialByClinic: Map<
     string,
-    { clinic_id: string; phone_number_id: string; access_token: string }
+    {
+      clinic_id: string;
+      twilio_subaccount_sid: string;
+      twilio_subaccount_auth_token: string;
+      whatsapp_number_e164: string;
+    }
   >,
   templateById: Map<
     string,
     {
       id: string;
-      name: string;
-      language: string;
+      twilio_content_sid: string | null;
       body_text: string;
-      header_type: string;
-      header_text: string | null;
       status: string;
       category: string;
     }
@@ -160,22 +162,8 @@ async function sendOne(
   if (template.status !== "approved") {
     return { ok: false, error: "Configured reminder template is not approved." };
   }
-  if (
-    template.header_type === "image" ||
-    template.header_type === "video" ||
-    template.header_type === "document" ||
-    template.header_type === "location"
-  ) {
-    return {
-      ok: false,
-      error: "Reminder template has a media header, which isn't supported for reminders.",
-    };
-  }
-  if (template.header_type === "text" && extractPlaceholders(template.header_text ?? "").length > 0) {
-    return {
-      ok: false,
-      error: "Reminder template's header has a variable, which isn't supported for reminders.",
-    };
+  if (!template.twilio_content_sid) {
+    return { ok: false, error: "Configured reminder template has no Twilio content id." };
   }
 
   const bodyPlaceholders = extractPlaceholders(template.body_text);
@@ -195,12 +183,12 @@ async function sendOne(
   const medicineText = [medicine.name, medicine.dosage].filter(Boolean).join(" — ") || medicine.name;
 
   const result = await sendWhatsAppTemplateMessage({
-    phoneNumberId: credential.phone_number_id,
-    accessToken: credential.access_token,
+    subaccountSid: credential.twilio_subaccount_sid,
+    subaccountAuthToken: credential.twilio_subaccount_auth_token,
+    from: credential.whatsapp_number_e164,
     to: patient.whatsapp_number,
-    templateName: template.name,
-    languageCode: template.language,
-    parameters: [patient.name, medicineText],
+    contentSid: template.twilio_content_sid,
+    contentVariables: { "1": patient.name, "2": medicineText },
   });
 
   if (!result.ok) {
