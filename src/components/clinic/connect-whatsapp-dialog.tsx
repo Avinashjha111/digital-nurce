@@ -46,20 +46,28 @@ declare global {
 
 type Step = "start" | "collect-phone" | "connecting" | "pending" | "otp" | "connected";
 
-// Facebook's SDK reads window.fbAsyncInit the moment its script finishes
-// executing, so it must exist BEFORE that script loads -- setting it from
-// a Script onLoad callback (which fires AFTER execution) is too late, and
-// FB.login() then fails with "init not called with valid version". This
-// runs once at module load, well before the dialog (or the script) mounts.
-if (typeof window !== "undefined" && !window.fbAsyncInit) {
-  window.fbAsyncInit = () => {
-    window.FB?.init({
-      appId: process.env.NEXT_PUBLIC_META_APP_ID ?? "",
-      cookie: true,
-      xfbml: true,
-      version: "v22.0",
-    });
-  };
+// Facebook's own convention is "set window.fbAsyncInit before the SDK
+// script loads, it'll call it for you" -- but a client-component module's
+// top-level code isn't guaranteed to run before a next/script tag finishes
+// loading (confirmed live: window.FB existed with FB.init as a function,
+// but FB.init() was never actually invoked, and FB.login() failed with
+// "init not called with valid version"). So this calls FB.init() directly,
+// idempotently, from whichever fires first -- the SDK's own callback (if
+// timing works out) or the Script tag's onLoad (guaranteed to fire after
+// window.FB exists).
+let fbInitialized = false;
+function initFacebookSdk() {
+  if (fbInitialized || !window.FB) return;
+  fbInitialized = true;
+  window.FB.init({
+    appId: process.env.NEXT_PUBLIC_META_APP_ID ?? "",
+    cookie: true,
+    xfbml: true,
+    version: "v22.0",
+  });
+}
+if (typeof window !== "undefined") {
+  window.fbAsyncInit = initFacebookSdk;
 }
 
 export function ConnectWhatsAppDialog({ clinicId }: { clinicId: string }) {
@@ -87,6 +95,7 @@ export function ConnectWhatsAppDialog({ clinicId }: { clinicId: string }) {
       setError("Facebook SDK is still loading -- try again in a moment.");
       return;
     }
+    initFacebookSdk();
     window.FB.login(
       () => {
         // The OAuth `code` in this callback is unused for Twilio's flow --
@@ -176,7 +185,11 @@ export function ConnectWhatsAppDialog({ clinicId }: { clinicId: string }) {
 
   return (
     <>
-      <Script src="https://connect.facebook.net/en_US/sdk.js" strategy="afterInteractive" />
+      <Script
+        src="https://connect.facebook.net/en_US/sdk.js"
+        strategy="afterInteractive"
+        onLoad={initFacebookSdk}
+      />
       <Dialog
         open={open}
         onOpenChange={(next) => {
