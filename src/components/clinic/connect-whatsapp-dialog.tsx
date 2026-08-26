@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import Script from "next/script";
+import { useEffect, useState } from "react";
 import { CheckCircle2, LogIn, Loader2 } from "lucide-react";
 import {
   connectWhatsApp,
@@ -46,28 +45,29 @@ declare global {
 
 type Step = "start" | "collect-phone" | "connecting" | "pending" | "otp" | "connected";
 
-// Facebook's own convention is "set window.fbAsyncInit before the SDK
-// script loads, it'll call it for you" -- but a client-component module's
-// top-level code isn't guaranteed to run before a next/script tag finishes
-// loading (confirmed live: window.FB existed with FB.init as a function,
-// but FB.init() was never actually invoked, and FB.login() failed with
-// "init not called with valid version"). So this calls FB.init() directly,
-// idempotently, from whichever fires first -- the SDK's own callback (if
-// timing works out) or the Script tag's onLoad (guaranteed to fire after
-// window.FB exists).
-let fbInitialized = false;
-function initFacebookSdk() {
-  if (fbInitialized || !window.FB) return;
-  fbInitialized = true;
-  window.FB.init({
-    appId: process.env.NEXT_PUBLIC_META_APP_ID ?? "",
-    cookie: true,
-    xfbml: true,
-    version: "v22.0",
-  });
-}
-if (typeof window !== "undefined") {
-  window.fbAsyncInit = initFacebookSdk;
+// Meta's own reference implementation for Embedded Signup: set
+// window.fbAsyncInit, THEN inject the SDK script via raw DOM manipulation
+// (not next/script -- live testing showed next/script's onLoad/afterInteractive
+// timing left FB.init() "called" in a way FB.login() didn't consider valid,
+// throwing "init not called with valid version"; this exact pattern is
+// Meta's own documented one and avoids whatever that timing mismatch was).
+function loadFacebookSdk() {
+  if (document.getElementById("facebook-jssdk")) return;
+
+  window.fbAsyncInit = () => {
+    window.FB?.init({
+      appId: process.env.NEXT_PUBLIC_META_APP_ID ?? "",
+      cookie: true,
+      xfbml: true,
+      version: "v22.0",
+    });
+  };
+
+  const firstScript = document.getElementsByTagName("script")[0];
+  const script = document.createElement("script");
+  script.id = "facebook-jssdk";
+  script.src = "https://connect.facebook.net/en_US/sdk.js";
+  firstScript.parentNode?.insertBefore(script, firstScript);
 }
 
 export function ConnectWhatsAppDialog({ clinicId }: { clinicId: string }) {
@@ -79,6 +79,10 @@ export function ConnectWhatsAppDialog({ clinicId }: { clinicId: string }) {
   const [senderStatus, setSenderStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    loadFacebookSdk();
+  }, []);
 
   function reset() {
     setStep("start");
@@ -95,7 +99,6 @@ export function ConnectWhatsAppDialog({ clinicId }: { clinicId: string }) {
       setError("Facebook SDK is still loading -- try again in a moment.");
       return;
     }
-    initFacebookSdk();
     window.FB.login(
       () => {
         // The OAuth `code` in this callback is unused for Twilio's flow --
@@ -184,12 +187,6 @@ export function ConnectWhatsAppDialog({ clinicId }: { clinicId: string }) {
   }
 
   return (
-    <>
-      <Script
-        src="https://connect.facebook.net/en_US/sdk.js"
-        strategy="afterInteractive"
-        onLoad={initFacebookSdk}
-      />
       <Dialog
         open={open}
         onOpenChange={(next) => {
@@ -306,6 +303,5 @@ export function ConnectWhatsAppDialog({ clinicId }: { clinicId: string }) {
           )}
         </DialogContent>
       </Dialog>
-    </>
   );
 }
