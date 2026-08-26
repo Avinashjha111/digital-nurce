@@ -46,10 +46,25 @@ declare global {
 
 type Step = "start" | "collect-phone" | "connecting" | "pending" | "otp" | "connected";
 
+// Facebook's SDK reads window.fbAsyncInit the moment its script finishes
+// executing, so it must exist BEFORE that script loads -- setting it from
+// a Script onLoad callback (which fires AFTER execution) is too late, and
+// FB.login() then fails with "init not called with valid version". This
+// runs once at module load, well before the dialog (or the script) mounts.
+if (typeof window !== "undefined" && !window.fbAsyncInit) {
+  window.fbAsyncInit = () => {
+    window.FB?.init({
+      appId: process.env.NEXT_PUBLIC_META_APP_ID ?? "",
+      cookie: true,
+      xfbml: true,
+      version: "v22.0",
+    });
+  };
+}
+
 export function ConnectWhatsAppDialog({ clinicId }: { clinicId: string }) {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<Step>("start");
-  const [fbReady, setFbReady] = useState(false);
   const [wabaId, setWabaId] = useState<string | null>(null);
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
@@ -64,19 +79,6 @@ export function ConnectWhatsAppDialog({ clinicId }: { clinicId: string }) {
     setOtp("");
     setSenderStatus(null);
     setError(null);
-  }
-
-  function initFacebookSdk() {
-    if (window.FB || fbReady) return;
-    window.fbAsyncInit = () => {
-      window.FB?.init({
-        appId: process.env.NEXT_PUBLIC_META_APP_ID ?? "",
-        cookie: true,
-        xfbml: true,
-        version: "v22.0",
-      });
-      setFbReady(true);
-    };
   }
 
   function launchEmbeddedSignup() {
@@ -174,11 +176,7 @@ export function ConnectWhatsAppDialog({ clinicId }: { clinicId: string }) {
 
   return (
     <>
-      <Script
-        src="https://connect.facebook.net/en_US/sdk.js"
-        strategy="lazyOnload"
-        onLoad={initFacebookSdk}
-      />
+      <Script src="https://connect.facebook.net/en_US/sdk.js" strategy="afterInteractive" />
       <Dialog
         open={open}
         onOpenChange={(next) => {
