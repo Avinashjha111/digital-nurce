@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { ComingSoon } from "@/components/coming-soon";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { StatusToneBadge } from "@/components/status-tone-badge";
 import {
   Card,
   CardContent,
@@ -56,6 +57,7 @@ export default async function AgencyClinicsPage() {
                   <TableHead>City</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>WhatsApp</TableHead>
+                  <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -83,6 +85,11 @@ export default async function AgencyClinicsPage() {
                           ? "Connected"
                           : "Not Connected"}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {clinic.activation_status === "pending_activation" && (
+                        <StatusToneBadge tone="warning">Pending Activation</StatusToneBadge>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

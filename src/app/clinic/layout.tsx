@@ -22,7 +22,11 @@ export default async function ClinicLayout({
   const supabase = await createClient();
   const [{ data: clinic }, usage] = await Promise.all([
     profile.clinic_id
-      ? supabase.from("clinics").select("whatsapp_status").eq("id", profile.clinic_id).single()
+      ? supabase
+          .from("clinics")
+          .select("whatsapp_status, activation_status")
+          .eq("id", profile.clinic_id)
+          .single()
       : Promise.resolve({ data: null }),
     profile.clinic_id
       ? getClinicUsageSummary(profile.clinic_id)
@@ -45,6 +49,7 @@ export default async function ClinicLayout({
             }
           : null
       }
+      activationPending={clinic?.activation_status === "pending_activation"}
     >
       {children}
     </AppShell>

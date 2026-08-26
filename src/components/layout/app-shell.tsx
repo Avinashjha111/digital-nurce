@@ -16,6 +16,7 @@ import { InstallAppButton } from "@/components/pwa/install-app-button";
 import { InstallAppBanner } from "@/components/pwa/install-app-banner";
 import { NotificationPermissionBanner } from "@/components/pwa/notification-permission-banner";
 import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
+import { ActivationPendingBanner } from "@/components/clinic/activation-pending-banner";
 
 export function AppShell({
   variant,
@@ -24,6 +25,7 @@ export function AppShell({
   userLabel,
   whatsapp,
   messageBalance,
+  activationPending,
   children,
 }: {
   variant: "agency" | "clinic";
@@ -36,6 +38,7 @@ export function AppShell({
     messagesRemaining: number;
     includedMessages: number;
   } | null;
+  activationPending?: boolean;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -131,13 +134,17 @@ export function AppShell({
               : cn("p-4 md:p-6", variant === "clinic" && "pb-20 md:pb-6")
           )}
         >
-          {variant === "clinic" && !isMobileInbox && (
+          {variant === "clinic" && !isMobileInbox && !activationPending && (
             <div className="mb-4 flex flex-col gap-2">
               <InstallAppBanner />
               <NotificationPermissionBanner />
             </div>
           )}
-          {children}
+          {activationPending ? (
+            <ActivationPendingBanner>{children}</ActivationPendingBanner>
+          ) : (
+            children
+          )}
         </main>
       </div>
 

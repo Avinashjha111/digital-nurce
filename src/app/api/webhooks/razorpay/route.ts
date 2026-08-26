@@ -88,6 +88,14 @@ export async function POST(request: NextRequest) {
         status: "active",
         created_by: link.created_by,
       });
+
+      // A self-signed-up clinic is locked ("pending_activation") until its
+      // first payment -- this is what lifts the dashboard blur/banner.
+      await admin
+        .from("clinics")
+        .update({ activation_status: "active" })
+        .eq("id", clinicId)
+        .eq("activation_status", "pending_activation");
     }
   } else if (notes.kind === "top_up") {
     const { data: pack } = await admin
