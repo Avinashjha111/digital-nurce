@@ -73,13 +73,18 @@ export async function verifyLoginOtp(
     .from("users")
     .select("role")
     .eq("id", data.user.id)
-    .single();
+    .maybeSingle();
+
+  if (!profile) {
+    return { error: "Your profile could not be loaded. Please try again." };
+  }
 
   // Force session establishment by calling getUser after verifyOtp
   // This ensures cookies are set before redirect
   await supabase.auth.getUser();
 
-  redirect(dashboardPathForRole(profile?.role ?? "clinic_admin"));
+  redirect(dashboardPathForRole(profile.role));
+}
 }
 
 export async function logout() {
