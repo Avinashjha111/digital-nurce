@@ -75,6 +75,10 @@ export async function verifyLoginOtp(
     .eq("id", data.user.id)
     .single();
 
+  // Force session establishment by calling getUser after verifyOtp
+  // This ensures cookies are set before redirect
+  await supabase.auth.getUser();
+
   redirect(dashboardPathForRole(profile?.role ?? "clinic_admin"));
 }
 
