@@ -75,14 +75,30 @@ export async function connectWhatsApp(
     return { error: "Activate this clinic (send a payment link) before connecting WhatsApp." };
   }
 
-  const subaccount = await createClinicSubaccount(clinic.name);
-  if (!subaccount.ok) {
-    return { error: `Could not create Twilio subaccount: ${subaccount.error}` };
+  // Check if this clinic already has incomplete/pending credentials (idempotency)
+  const admin = createAdminClient();
+  const { data: existingCred } = await admin
+    .from("whatsapp_credentials")
+    .select("twilio_subaccount_sid, twilio_subaccount_auth_token")
+    .eq("clinic_id", clinicId)
+    .maybeSingle();
+
+  let subaccountSid = existingCred?.twilio_subaccount_sid;
+  let subaccountAuthToken = existingCred?.twilio_subaccount_auth_token;
+
+  // Only create new subaccount if one doesn't exist
+  if (!subaccountSid || !subaccountAuthToken) {
+    const subaccount = await createClinicSubaccount(clinic.name);
+    if (!subaccount.ok) {
+      return { error: `Could not create Twilio subaccount: ${subaccount.error}` };
+    }
+    subaccountSid = subaccount.sid;
+    subaccountAuthToken = subaccount.authToken;
   }
 
   const sender = await registerSender({
-    subaccountSid: subaccount.sid,
-    subaccountAuthToken: subaccount.authToken,
+    subaccountSid,
+    subaccountAuthToken,
     wabaId: parsed.data.waba_id,
     phoneE164: parsed.data.phone_e164,
   });

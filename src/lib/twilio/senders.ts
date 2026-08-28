@@ -28,10 +28,19 @@ async function parseSenderResponse(
 ): Promise<{ ok: true; sender: TwilioSender } | SendersApiError> {
   const json = await res.json().catch(() => null);
   if (!res.ok) {
-    const message =
+    let message =
       (json as { message?: string; detail?: string } | null)?.message ??
       (json as { message?: string; detail?: string } | null)?.detail ??
       `Twilio Senders API error (${res.status})`;
+
+    // Add extra details for 409 conflict
+    if (res.status === 409 && json) {
+      console.error("[Twilio 409 Conflict] Full response:", JSON.stringify(json));
+      if ((json as { details?: object }).details) {
+        message += ` [Details: ${JSON.stringify((json as { details?: object }).details)}]`;
+      }
+    }
+
     return { ok: false, error: message };
   }
   return {
