@@ -70,20 +70,26 @@ export async function registerSender({
   phoneE164: string; // digits only, no "+"
   verificationMethod?: "sms" | "voice";
 }): Promise<{ ok: true; sender: TwilioSender } | SendersApiError> {
+  const payload = {
+    sender_id: `whatsapp:+${phoneE164}`,
+    configuration: {
+      waba_id: wabaId,
+      verification_method: verificationMethod,
+    },
+  };
+
+  console.log("[Twilio Senders API] Sending request with payload:", JSON.stringify(payload));
+
   const res = await fetch(SENDERS_API_BASE, {
     method: "POST",
     headers: {
       Authorization: basicAuthHeader(subaccountSid, subaccountAuthToken),
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      sender_id: `whatsapp:+${phoneE164}`,
-      configuration: {
-        waba_id: wabaId,
-        verification_method: verificationMethod,
-      },
-    }),
+    body: JSON.stringify(payload),
   });
+
+  console.log("[Twilio Senders API] Response status:", res.status);
   return parseSenderResponse(res);
 }
 
