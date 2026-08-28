@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useActionState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useActionState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   loginStep1,
   verifyLoginOtp,
@@ -31,9 +31,16 @@ export default function LoginPage() {
 }
 
 function LoginForm() {
+  const router = useRouter();
   const justVerified = useSearchParams().get("verified") === "1";
   const [step1State, step1Action, step1Pending] = useActionState(loginStep1, step1Initial);
   const [step2State, step2Action, step2Pending] = useActionState(verifyLoginOtp, step2Initial);
+
+  useEffect(() => {
+    if (step2State.redirectTo) {
+      router.replace(step2State.redirectTo);
+    }
+  }, [router, step2State.redirectTo]);
 
   const showOtpStep = step1State.needsOtp;
   const email = step1State.email ?? "";
