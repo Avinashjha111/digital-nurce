@@ -108,11 +108,10 @@ export async function connectWhatsApp(
 
   // Secrets go through the admin client only -- the caller's own session has
   // (and should have) no RLS policy that would let this table be touched.
-  const admin = createAdminClient();
   const { error: credError } = await admin.from("whatsapp_credentials").upsert({
     clinic_id: clinicId,
-    twilio_subaccount_sid: subaccount.sid,
-    twilio_subaccount_auth_token: subaccount.authToken,
+    twilio_subaccount_sid: subaccountSid,
+    twilio_subaccount_auth_token: subaccountAuthToken,
     twilio_sender_sid: sender.sender.sid,
     whatsapp_number_e164: parsed.data.phone_e164,
     waba_id: parsed.data.waba_id,
