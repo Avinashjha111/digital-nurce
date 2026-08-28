@@ -85,7 +85,6 @@ export async function verifyLoginOtp(
 
   redirect(dashboardPathForRole(profile.role));
 }
-}
 
 export async function logout() {
   const supabase = await createClient();
