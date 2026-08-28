@@ -47,7 +47,7 @@ export async function loginStep1(
   return { error: null, needsOtp: true, email };
 }
 
-export type VerifyLoginOtpState = { error: string | null; redirectTo?: string };
+export type VerifyLoginOtpState = { error: string | null };
 
 // Step 2: the OTP is what actually creates the session -- a correct
 // password from step 1 gets you here, nothing more.
@@ -75,7 +75,7 @@ export async function verifyLoginOtp(
     .eq("id", data.user.id)
     .single();
 
-  return { error: null, redirectTo: dashboardPathForRole(profile?.role ?? "clinic_admin") };
+  redirect(dashboardPathForRole(profile?.role ?? "clinic_admin"));
 }
 
 export async function logout() {
