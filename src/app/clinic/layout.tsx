@@ -16,17 +16,21 @@ export default async function ClinicLayout({
 }) {
   const profile = await getCurrentProfile();
 
-  if (!profile) redirect("/login");
+  if (!profile) {
+    redirect("/login");
+  }
   if (profile.role === "agency_admin") redirect("/agency/dashboard");
 
   const supabase = await createClient();
+
+  // Use maybeSingle instead of single to avoid throwing on missing clinic
   const [{ data: clinic }, usage] = await Promise.all([
     profile.clinic_id
       ? supabase
           .from("clinics")
           .select("whatsapp_status, activation_status")
           .eq("id", profile.clinic_id)
-          .single()
+          .maybeSingle()
       : Promise.resolve({ data: null }),
     profile.clinic_id
       ? getClinicUsageSummary(profile.clinic_id)
