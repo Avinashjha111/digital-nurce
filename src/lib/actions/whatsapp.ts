@@ -101,6 +101,7 @@ export async function connectWhatsApp(
     subaccountAuthToken,
     wabaId: parsed.data.waba_id,
     phoneE164: parsed.data.phone_e164,
+    profileName: clinic.name,
   });
   if (!sender.ok) {
     return { error: `Could not register WhatsApp sender: ${sender.error}` };

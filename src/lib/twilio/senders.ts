@@ -23,25 +23,76 @@ export type TwilioSender = {
 
 type SendersApiError = { ok: false; error: string };
 
+// Safe known field names that are allowed to be identified if validation fails
+const SAFE_VALIDATION_FIELDS = new Set([
+  "profile",
+  "profile.name",
+  "name",
+  "sender_id",
+  "phone_number",
+  "waba_id",
+  "configuration.waba_id",
+  "verification_method",
+  "configuration.verification_method",
+]);
+
+function extractSafeFieldNames(rawDetails: unknown): string[] {
+  if (!rawDetails) return [];
+  const fieldSet = new Set<string>();
+
+  if (Array.isArray(rawDetails)) {
+    for (const item of rawDetails) {
+      if (item && typeof item === "object") {
+        const field = String(
+          (item as { field?: string; property?: string }).field ??
+            (item as { property?: string }).property ??
+            ""
+        ).trim().toLowerCase();
+        if (field && SAFE_VALIDATION_FIELDS.has(field)) {
+          fieldSet.add(field);
+        }
+      }
+    }
+  } else if (typeof rawDetails === "object") {
+    for (const key of Object.keys(rawDetails as Record<string, unknown>)) {
+      const lowerKey = key.trim().toLowerCase();
+      if (SAFE_VALIDATION_FIELDS.has(lowerKey)) {
+        fieldSet.add(lowerKey);
+      }
+    }
+  }
+
+  return Array.from(fieldSet);
+}
+
 async function parseSenderResponse(
   res: Response
 ): Promise<{ ok: true; sender: TwilioSender } | SendersApiError> {
   const json = await res.json().catch(() => null);
   if (!res.ok) {
-    let message =
-      (json as { message?: string; detail?: string } | null)?.message ??
-      (json as { message?: string; detail?: string } | null)?.detail ??
-      `Twilio Senders API error (${res.status})`;
+    const code = (json as { code?: number | string } | null)?.code;
+    const rawDetails =
+      (json as { details?: unknown } | null)?.details ??
+      (json as { errors?: unknown } | null)?.errors;
+    const safeFields = extractSafeFieldNames(rawDetails);
 
-    // Add extra details for 409 conflict
-    if (res.status === 409 && json) {
-      console.error("[Twilio 409 Conflict] Full response:", JSON.stringify(json));
-      if ((json as { details?: object }).details) {
-        message += ` [Details: ${JSON.stringify((json as { details?: object }).details)}]`;
-      }
+    // Safe server-side diagnostic logging: only HTTP status, error code, and safe field names
+    console.error("[Twilio Senders API Error]", {
+      status: res.status,
+      code: code ?? "none",
+      invalidFields: safeFields.length > 0 ? safeFields : undefined,
+    });
+
+    let clientMessage = "WhatsApp sender registration failed. Please verify the sender details and try again.";
+    if (safeFields.length > 0) {
+      clientMessage += ` (Invalid fields: ${safeFields.join(", ")})`;
     }
 
-    return { ok: false, error: message };
+    if (code) {
+      clientMessage = `[Error ${code}] ${clientMessage}`;
+    }
+
+    return { ok: false, error: clientMessage };
   }
   return {
     ok: true,
@@ -62,23 +113,26 @@ export async function registerSender({
   subaccountAuthToken,
   wabaId,
   phoneE164,
+  profileName,
   verificationMethod = "sms",
 }: {
   subaccountSid: string;
   subaccountAuthToken: string;
   wabaId: string;
   phoneE164: string; // digits only, no "+"
+  profileName: string;
   verificationMethod?: "sms" | "voice";
 }): Promise<{ ok: true; sender: TwilioSender } | SendersApiError> {
   const payload = {
     sender_id: `whatsapp:+${phoneE164}`,
+    profile: {
+      name: profileName,
+    },
     configuration: {
       waba_id: wabaId,
       verification_method: verificationMethod,
     },
   };
-
-  console.log("[Twilio Senders API] Sending request with payload:", JSON.stringify(payload));
 
   const res = await fetch(SENDERS_API_BASE, {
     method: "POST",
@@ -89,7 +143,6 @@ export async function registerSender({
     body: JSON.stringify(payload),
   });
 
-  console.log("[Twilio Senders API] Response status:", res.status);
   return parseSenderResponse(res);
 }
 
