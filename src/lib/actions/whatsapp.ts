@@ -79,23 +79,165 @@ export async function connectWhatsApp(
   const admin = createAdminClient();
   const { data: existingCred } = await admin
     .from("whatsapp_credentials")
-    .select("twilio_subaccount_sid, twilio_subaccount_auth_token")
+    .select("twilio_subaccount_sid, twilio_subaccount_auth_token, sender_status, updated_at")
     .eq("clinic_id", clinicId)
     .maybeSingle();
+
+  // If this clinic was previously flagged for manual recovery after a subaccount
+  // persistence failure, block automatic re-creation to prevent duplicate accounts.
+  if (
+    existingCred?.sender_status === "manual_recovery_required" ||
+    existingCred?.sender_status === "subaccount_persist_failed"
+  ) {
+    return {
+      error:
+        "WhatsApp subaccount setup requires manual assistance. Please contact support before retrying.",
+    };
+  }
 
   let subaccountSid = existingCred?.twilio_subaccount_sid;
   let subaccountAuthToken = existingCred?.twilio_subaccount_auth_token;
 
-  // Only create new subaccount if one doesn't exist
+  // Only create a new subaccount if one does not exist
   if (!subaccountSid || !subaccountAuthToken) {
-    const subaccount = await createClinicSubaccount(clinic.name);
-    if (!subaccount.ok) {
-      return { error: `Could not create Twilio subaccount: ${subaccount.error}` };
+    let claimAcquired = false;
+
+    if (!existingCred) {
+      // Case A: No row exists in whatsapp_credentials yet.
+      // Attempt atomic INSERT of placeholder claim using clinic_id PRIMARY KEY.
+      const { error: insertError } = await admin
+        .from("whatsapp_credentials")
+        .insert({
+          clinic_id: clinicId,
+          waba_id: parsed.data.waba_id,
+          sender_status: "claiming",
+          updated_at: new Date().toISOString(),
+        });
+
+      if (!insertError) {
+        claimAcquired = true;
+      } else if (insertError.code === "23505") {
+        // Primary key conflict: another concurrent request inserted first
+        claimAcquired = false;
+      } else {
+        return { error: `Database error during provisioning claim: ${insertError.message}` };
+      }
+    } else {
+      // Case B: Row exists but twilio_subaccount_sid is NULL.
+      // Acquire claim using atomic conditional UPDATE.
+      // Stale claim recovery: ONLY recover if status was 'claiming' or 'failed',
+      // and NEVER recover if status is 'manual_recovery_required' or 'subaccount_persist_failed'.
+      const staleThreshold = new Date(Date.now() - 60 * 1000).toISOString();
+      const { data: claimedRow, error: updateError } = await admin
+        .from("whatsapp_credentials")
+        .update({
+          waba_id: parsed.data.waba_id,
+          sender_status: "claiming",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("clinic_id", clinicId)
+        .is("twilio_subaccount_sid", null)
+        .neq("sender_status", "manual_recovery_required")
+        .neq("sender_status", "subaccount_persist_failed")
+        .or(`sender_status.neq.claiming,updated_at.lt.${staleThreshold}`)
+        .select("clinic_id, sender_status")
+        .maybeSingle();
+
+      if (updateError) {
+        return { error: `Database error during provisioning claim: ${updateError.message}` };
+      }
+
+      claimAcquired = !!claimedRow;
     }
-    subaccountSid = subaccount.sid;
-    subaccountAuthToken = subaccount.authToken;
+
+    if (!claimAcquired) {
+      // Lost the race or another request is actively provisioning
+      const { data: refreshedCred } = await admin
+        .from("whatsapp_credentials")
+        .select("twilio_subaccount_sid, twilio_subaccount_auth_token, sender_status")
+        .eq("clinic_id", clinicId)
+        .maybeSingle();
+
+      if (
+        refreshedCred?.sender_status === "manual_recovery_required" ||
+        refreshedCred?.sender_status === "subaccount_persist_failed"
+      ) {
+        return {
+          error:
+            "WhatsApp subaccount setup requires manual assistance. Please contact support before retrying.",
+        };
+      }
+
+      if (refreshedCred?.twilio_subaccount_sid && refreshedCred?.twilio_subaccount_auth_token) {
+        subaccountSid = refreshedCred.twilio_subaccount_sid;
+        subaccountAuthToken = refreshedCred.twilio_subaccount_auth_token;
+      } else {
+        return {
+          error: "WhatsApp setup is already in progress. Please wait a few seconds and try again.",
+        };
+      }
+    } else {
+      // Exclusively acquired claim -- call Twilio to create subaccount
+      const subaccount = await createClinicSubaccount(clinic.name);
+      if (!subaccount.ok) {
+        // Twilio subaccount was never created -- reset claim to 'failed' for future retries
+        await admin
+          .from("whatsapp_credentials")
+          .update({ sender_status: "failed", updated_at: new Date().toISOString() })
+          .eq("clinic_id", clinicId)
+          .eq("sender_status", "claiming");
+
+        return { error: `Could not create Twilio subaccount: ${subaccount.error}` };
+      }
+
+      subaccountSid = subaccount.sid;
+      subaccountAuthToken = subaccount.authToken;
+
+      // Persist credentials with up to 3 immediate retry attempts
+      let persistSuccess = false;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        const { error: persistError } = await admin
+          .from("whatsapp_credentials")
+          .update({
+            twilio_subaccount_sid: subaccountSid,
+            twilio_subaccount_auth_token: subaccountAuthToken,
+            waba_id: parsed.data.waba_id,
+            sender_status: "subaccount_created",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("clinic_id", clinicId);
+
+        if (!persistError) {
+          persistSuccess = true;
+          break;
+        }
+
+        if (attempt < 3) {
+          await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+        }
+      }
+
+      if (!persistSuccess) {
+        // Subaccount was created on Twilio, but writing to DB failed even after retries.
+        // Lock the clinic in 'manual_recovery_required' so automatic provisioning NEVER creates a second subaccount.
+        await admin
+          .from("whatsapp_credentials")
+          .update({
+            sender_status: "manual_recovery_required",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("clinic_id", clinicId);
+
+        return {
+          error:
+            "WhatsApp subaccount was provisioned with Twilio, but saving credentials failed. Please contact support to complete setup.",
+        };
+      }
+    }
   }
 
+  // At this point, subaccount credentials are guaranteed persisted in DB.
+  // Proceed with sender registration.
   const sender = await registerSender({
     subaccountSid,
     subaccountAuthToken,
@@ -103,22 +245,28 @@ export async function connectWhatsApp(
     phoneE164: parsed.data.phone_e164,
     profileName: clinic.name,
   });
+
   if (!sender.ok) {
+    // Preserve subaccount SID and auth token; only mark sender_status as failed
+    await admin
+      .from("whatsapp_credentials")
+      .update({
+        sender_status: "failed",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("clinic_id", clinicId);
+
     return { error: `Could not register WhatsApp sender: ${sender.error}` };
   }
 
-  // Secrets go through the admin client only -- the caller's own session has
-  // (and should have) no RLS policy that would let this table be touched.
-  const { error: credError } = await admin.from("whatsapp_credentials").upsert({
-    clinic_id: clinicId,
-    twilio_subaccount_sid: subaccountSid,
-    twilio_subaccount_auth_token: subaccountAuthToken,
+  // Sender registered successfully (or pending)
+  const { error: credError } = await admin.from("whatsapp_credentials").update({
     twilio_sender_sid: sender.sender.sid,
     whatsapp_number_e164: parsed.data.phone_e164,
     waba_id: parsed.data.waba_id,
     sender_status: sender.sender.status,
     updated_at: new Date().toISOString(),
-  });
+  }).eq("clinic_id", clinicId);
 
   if (credError) {
     if (credError.code === "23505") {

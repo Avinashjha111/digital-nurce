@@ -132,7 +132,7 @@ export function ConnectWhatsAppDialog({ clinicId }: { clinicId: string }) {
   }
 
   async function handleConnect() {
-    if (!wabaId) return;
+    if (pending || !wabaId) return;
     setPending(true);
     setError(null);
     try {
