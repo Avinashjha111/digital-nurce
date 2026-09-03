@@ -114,14 +114,12 @@ export async function registerSender({
   wabaId,
   phoneE164,
   profileName,
-  verificationMethod = "sms",
 }: {
   subaccountSid: string;
   subaccountAuthToken: string;
   wabaId: string;
   phoneE164: string; // digits only, no "+"
   profileName: string;
-  verificationMethod?: "sms" | "voice";
 }): Promise<{ ok: true; sender: TwilioSender } | SendersApiError> {
   const payload = {
     sender_id: `whatsapp:+${phoneE164}`,
@@ -130,7 +128,6 @@ export async function registerSender({
     },
     configuration: {
       waba_id: wabaId,
-      verification_method: verificationMethod,
     },
   };
 

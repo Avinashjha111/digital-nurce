@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { CheckCircle2, LogIn, Loader2 } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+import { CheckCircle2, LogIn, Loader2, AlertCircle } from "lucide-react";
 import {
   connectWhatsApp,
   checkWhatsAppSenderStatus,
   submitWhatsAppSenderOtp,
+  getWhatsAppConnectionState,
 } from "@/lib/actions/whatsapp";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,14 +44,10 @@ declare global {
   }
 }
 
-type Step = "start" | "collect-phone" | "connecting" | "pending" | "otp" | "connected";
+type Step = "loading" | "start" | "collect-phone" | "pending" | "otp" | "connected";
 
 // Meta's own reference implementation for Embedded Signup: set
-// window.fbAsyncInit, THEN inject the SDK script via raw DOM manipulation
-// (not next/script -- live testing showed next/script's onLoad/afterInteractive
-// timing left FB.init() "called" in a way FB.login() didn't consider valid,
-// throwing "init not called with valid version"; this exact pattern is
-// Meta's own documented one and avoids whatever that timing mismatch was).
+// window.fbAsyncInit, THEN inject the SDK script via raw DOM manipulation.
 function loadFacebookSdk() {
   if (document.getElementById("facebook-jssdk")) return;
 
@@ -72,7 +69,9 @@ function loadFacebookSdk() {
 
 export function ConnectWhatsAppDialog({ clinicId }: { clinicId: string }) {
   const [open, setOpen] = useState(false);
-  const [step, setStep] = useState<Step>("start");
+  const [step, setStep] = useState<Step>("loading");
+  const [hasStoredWaba, setHasStoredWaba] = useState(false);
+  const [showReconnectConfirm, setShowReconnectConfirm] = useState(false);
   const [wabaId, setWabaId] = useState<string | null>(null);
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
@@ -84,13 +83,48 @@ export function ConnectWhatsAppDialog({ clinicId }: { clinicId: string }) {
     loadFacebookSdk();
   }, []);
 
+  const loadConnectionState = useCallback(async () => {
+    setStep("loading");
+    setError(null);
+    setShowReconnectConfirm(false);
+    try {
+      const state = await getWhatsAppConnectionState(clinicId);
+      if (state.error) {
+        setError(state.error);
+        setStep("start");
+        return;
+      }
+
+      if (state.senderConnected) {
+        setSenderStatus(state.senderStatus ?? "ONLINE");
+        setStep("connected");
+      } else if (state.hasWaba) {
+        setHasStoredWaba(true);
+        if (state.phoneNumber) {
+          setPhone(state.phoneNumber);
+        }
+        setSenderStatus(state.senderStatus ?? null);
+        setStep("collect-phone");
+      } else {
+        setHasStoredWaba(false);
+        setStep("start");
+      }
+    } catch {
+      setError("Failed to load connection status.");
+      setStep("start");
+    }
+  }, [clinicId]);
+
   function reset() {
-    setStep("start");
+    setStep("loading");
+    setHasStoredWaba(false);
+    setShowReconnectConfirm(false);
     setWabaId(null);
     setPhone("");
     setOtp("");
     setSenderStatus(null);
     setError(null);
+    setPending(false);
   }
 
   function launchEmbeddedSignup() {
@@ -101,9 +135,7 @@ export function ConnectWhatsAppDialog({ clinicId }: { clinicId: string }) {
     }
     window.FB.login(
       () => {
-        // The OAuth `code` in this callback is unused for Twilio's flow --
-        // what we actually need (waba_id) arrives via the postMessage
-        // listener below, from the WA_EMBEDDED_SIGNUP FINISH event.
+        // Handled via postMessage listener
       },
       {
         config_id: process.env.NEXT_PUBLIC_WHATSAPP_CONFIG_ID ?? "",
@@ -124,6 +156,8 @@ export function ConnectWhatsAppDialog({ clinicId }: { clinicId: string }) {
       const data = JSON.parse(event.data);
       if (data.type === "WA_EMBEDDED_SIGNUP" && data.event === "FINISH") {
         setWabaId(data.data?.waba_id ?? null);
+        setHasStoredWaba(false); // Using freshly linked WABA from Meta
+        setShowReconnectConfirm(false);
         setStep("collect-phone");
       }
     } catch {
@@ -132,11 +166,14 @@ export function ConnectWhatsAppDialog({ clinicId }: { clinicId: string }) {
   }
 
   async function handleConnect() {
-    if (pending || !wabaId) return;
+    if (pending || (!hasStoredWaba && !wabaId)) return;
     setPending(true);
     setError(null);
     try {
-      const result = await connectWhatsApp(clinicId, { wabaId, phoneE164: phone });
+      const result = await connectWhatsApp(clinicId, {
+        wabaId: wabaId ?? undefined,
+        phoneE164: phone,
+      });
       if (result.error) {
         setError(result.error);
         return;
@@ -187,121 +224,219 @@ export function ConnectWhatsAppDialog({ clinicId }: { clinicId: string }) {
   }
 
   return (
-      <Dialog
-        open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          if (next) {
-            window.addEventListener("message", handleEmbeddedSignupMessage);
-          } else {
-            window.removeEventListener("message", handleEmbeddedSignupMessage);
-            reset();
-          }
-        }}
-      >
-        <DialogTrigger render={<Button />}>Connect WhatsApp</DialogTrigger>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Connect WhatsApp</DialogTitle>
-            <DialogDescription>
-              Connect this clinic&apos;s WhatsApp Business Account through Facebook --
-              we register it with Twilio automatically.
-            </DialogDescription>
-          </DialogHeader>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) {
+          window.addEventListener("message", handleEmbeddedSignupMessage);
+          loadConnectionState();
+        } else {
+          window.removeEventListener("message", handleEmbeddedSignupMessage);
+          reset();
+        }
+      }}
+    >
+      <DialogTrigger render={<Button />}>Connect WhatsApp</DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Connect WhatsApp</DialogTitle>
+          <DialogDescription>
+            Connect this clinic&apos;s WhatsApp Business Account through Facebook --
+            we register it with Twilio automatically.
+          </DialogDescription>
+        </DialogHeader>
 
-          {step === "connected" ? (
-            <div className="flex flex-col items-center gap-3 py-4 text-center">
-              <CheckCircle2 className="h-8 w-8 text-primary" />
-              <p className="text-sm">WhatsApp connected successfully.</p>
-              <DialogClose render={<Button />}>Done</DialogClose>
+        {step === "loading" && (
+          <div className="flex flex-col items-center justify-center gap-3 py-8 text-center text-muted-foreground">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <p className="text-sm">Checking WhatsApp connection status...</p>
+          </div>
+        )}
+
+        {step === "connected" && (
+          <div className="flex flex-col items-center gap-3 py-4 text-center">
+            <CheckCircle2 className="h-8 w-8 text-primary" />
+            <p className="text-sm font-medium">WhatsApp Connected</p>
+            <p className="text-xs text-muted-foreground">
+              This clinic is actively connected and ready to send WhatsApp messages.
+            </p>
+            <DialogClose render={<Button />}>Done</DialogClose>
+          </div>
+        )}
+
+        {step === "start" && (
+          <div className="flex flex-col gap-4">
+            <p className="text-sm text-muted-foreground">
+              Link your clinic&apos;s Facebook and WhatsApp Business Account to begin setup.
+            </p>
+            <Button type="button" onClick={launchEmbeddedSignup} className="w-fit gap-2">
+              <LogIn className="h-4 w-4" />
+              Connect with Facebook
+            </Button>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+          </div>
+        )}
+
+        {step === "collect-phone" && (
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1">
+              <p className="text-sm font-medium">
+                {hasStoredWaba
+                  ? "Facebook account already linked"
+                  : "Facebook account linked"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {hasStoredWaba
+                  ? "Complete WhatsApp sender registration with Twilio."
+                  : "Enter the clinic's WhatsApp number to finish registering it."}
+              </p>
             </div>
-          ) : (
-            <div className="flex flex-col gap-4">
-              {step === "start" && (
-                <Button type="button" onClick={launchEmbeddedSignup} className="w-fit gap-2">
-                  <LogIn className="h-4 w-4" />
-                  Connect with Facebook
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="phone_e164">WhatsApp number (with country code)</Label>
+              <Input
+                id="phone_e164"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+91 98765 43210"
+                disabled={pending}
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <Button
+                type="button"
+                disabled={pending || !phone.trim()}
+                onClick={handleConnect}
+                className="w-fit"
+              >
+                {pending ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Registering...
+                  </>
+                ) : hasStoredWaba ? (
+                  "Retry WhatsApp Sender"
+                ) : (
+                  "Register WhatsApp Sender"
+                )}
+              </Button>
+
+              {hasStoredWaba && !showReconnectConfirm && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={pending}
+                  onClick={() => setShowReconnectConfirm(true)}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Reconnect Facebook / Change WABA
                 </Button>
               )}
-
-              {step === "collect-phone" && (
-                <div className="flex flex-col gap-3">
-                  <p className="text-sm text-muted-foreground">
-                    Facebook account linked. Enter the clinic&apos;s WhatsApp number to
-                    finish registering it.
-                  </p>
-                  <div className="flex flex-col gap-2">
-                    <Label htmlFor="phone_e164">WhatsApp number (with country code)</Label>
-                    <Input
-                      id="phone_e164"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="+91 98765 43210"
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    disabled={pending || !phone.trim()}
-                    onClick={handleConnect}
-                    className="w-fit"
-                  >
-                    {pending ? (
-                      <>
-                        <Loader2 className="size-4 animate-spin" />
-                        Registering...
-                      </>
-                    ) : (
-                      "Register WhatsApp Sender"
-                    )}
-                  </Button>
-                </div>
-              )}
-
-              {(step === "pending" || step === "otp") && (
-                <div className="flex flex-col gap-3">
-                  <p className="text-sm text-muted-foreground">
-                    WhatsApp is being set up with Twilio (status:{" "}
-                    <span className="font-medium">{senderStatus ?? "unknown"}</span>). This
-                    can take a few minutes.
-                  </p>
-
-                  {step === "otp" ? (
-                    <div className="flex flex-col gap-2">
-                      <Label htmlFor="otp">Verification code</Label>
-                      <Input
-                        id="otp"
-                        value={otp}
-                        onChange={(e) => setOtp(e.target.value)}
-                        inputMode="numeric"
-                      />
-                      <Button type="button" disabled={pending || !otp.trim()} onClick={handleSubmitOtp} className="w-fit">
-                        {pending ? "Verifying..." : "Verify"}
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      <Button type="button" variant="outline" disabled={pending} onClick={handleCheckStatus}>
-                        {pending ? (
-                          <>
-                            <Loader2 className="size-4 animate-spin" />
-                            Checking...
-                          </>
-                        ) : (
-                          "Check status"
-                        )}
-                      </Button>
-                      <Button type="button" variant="ghost" onClick={() => setStep("otp")}>
-                        Enter verification code
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {error && <p className="text-sm text-destructive">{error}</p>}
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
+
+            {showReconnectConfirm && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <div className="flex flex-col gap-2">
+                    <p>
+                      Connecting a new Facebook account or WABA will replace this clinic&apos;s
+                      linked WhatsApp account. Are you sure you want to proceed?
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        className="h-7 text-xs"
+                        onClick={() => {
+                          setShowReconnectConfirm(false);
+                          launchEmbeddedSignup();
+                        }}
+                      >
+                        Yes, Connect New Facebook Account
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => setShowReconnectConfirm(false)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {error && <p className="text-sm text-destructive">{error}</p>}
+          </div>
+        )}
+
+        {(step === "pending" || step === "otp") && (
+          <div className="flex flex-col gap-3">
+            <p className="text-sm text-muted-foreground">
+              WhatsApp is being set up with Twilio (status:{" "}
+              <span className="font-medium">{senderStatus ?? "unknown"}</span>). This
+              can take a few minutes.
+            </p>
+
+            {step === "otp" ? (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="otp">Verification code</Label>
+                <Input
+                  id="otp"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value)}
+                  inputMode="numeric"
+                  disabled={pending}
+                />
+                <Button
+                  type="button"
+                  disabled={pending || !otp.trim()}
+                  onClick={handleSubmitOtp}
+                  className="w-fit"
+                >
+                  {pending ? "Verifying..." : "Verify"}
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={pending}
+                  onClick={handleCheckStatus}
+                >
+                  {pending ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      Checking...
+                    </>
+                  ) : (
+                    "Check status"
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setStep("otp")}
+                  disabled={pending}
+                >
+                  Enter verification code
+                </Button>
+              </div>
+            )}
+
+            {error && <p className="text-sm text-destructive">{error}</p>}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

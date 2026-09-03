@@ -15,6 +15,74 @@ export type ConnectWhatsAppState = {
   senderStatus?: string;
 };
 
+export type WhatsAppConnectionState = {
+  error: string | null;
+  metaConnected: boolean;
+  senderConnected: boolean;
+  senderStatus: string | null;
+  hasWaba: boolean;
+  phoneNumber: string | null;
+};
+
+// Safe server-side read action to check clinic WhatsApp connection state
+// Returns only non-secret flags, never returning Auth Tokens, SIDs, or env values.
+export async function getWhatsAppConnectionState(
+  clinicId: string
+): Promise<WhatsAppConnectionState> {
+  const profile = await getCurrentProfile();
+  if (!profile || profile.role !== "agency_admin") {
+    return {
+      error: "Only agency admins can view WhatsApp connection state.",
+      metaConnected: false,
+      senderConnected: false,
+      senderStatus: null,
+      hasWaba: false,
+      phoneNumber: null,
+    };
+  }
+
+  const supabase = await createClient();
+  const { data: clinic } = await supabase
+    .from("clinics")
+    .select("id, whatsapp_status, whatsapp_number")
+    .eq("id", clinicId)
+    .single();
+
+  if (!clinic) {
+    return {
+      error: "Clinic not found or you do not own it.",
+      metaConnected: false,
+      senderConnected: false,
+      senderStatus: null,
+      hasWaba: false,
+      phoneNumber: null,
+    };
+  }
+
+  const admin = createAdminClient();
+  const { data: cred } = await admin
+    .from("whatsapp_credentials")
+    .select("waba_id, sender_status, whatsapp_number_e164")
+    .eq("clinic_id", clinicId)
+    .maybeSingle();
+
+  const hasWaba = Boolean(cred?.waba_id);
+  const senderConnected =
+    cred?.sender_status?.toUpperCase() === "ONLINE" ||
+    clinic.whatsapp_status === "connected";
+
+  return {
+    error: null,
+    metaConnected: hasWaba,
+    senderConnected,
+    senderStatus: cred?.sender_status ?? null,
+    hasWaba,
+    phoneNumber: cred?.whatsapp_number_e164
+      ? `+${cred.whatsapp_number_e164}`
+      : clinic.whatsapp_number ?? null,
+  };
+}
+
 const connectSchema = z.object({
   waba_id: z.string().trim().min(1, "WhatsApp Business Account ID is required"),
   phone_e164: z
@@ -25,18 +93,14 @@ const connectSchema = z.object({
     .refine((v) => v.length >= 10, "Enter a valid WhatsApp number with country code"),
 });
 
-export type ConnectWhatsAppInput = { wabaId: string; phoneE164: string };
+export type ConnectWhatsAppInput = { wabaId?: string; phoneE164: string };
 
 // Twilio ISV / Embedded Signup connect flow: the browser side (see
 // ConnectWhatsAppDialog) runs Facebook's Embedded Signup popup and hands
 // us back { waba_id } from its FINISH postMessage event, plus the clinic's
-// WhatsApp number collected as a plain form field (Twilio's own guidance:
-// Embedded Signup alone doesn't guarantee the E.164 number in the exact
-// shape the Senders API needs). This creates a dedicated Twilio subaccount
-// for the clinic, then registers that number as a WhatsApp Sender under it.
-// Registration is asynchronous on Twilio's side -- this returns whatever
-// status Twilio gives immediately, and checkWhatsAppSenderStatus() below
-// is what the UI polls with until it reaches "ONLINE".
+// WhatsApp number collected as a plain form field.
+// If a WABA ID is already persisted in whatsapp_credentials for this clinic,
+// it is automatically reused without requiring re-authentication through Facebook.
 export async function connectWhatsApp(
   clinicId: string,
   input: ConnectWhatsAppInput
@@ -44,14 +108,6 @@ export async function connectWhatsApp(
   const profile = await getCurrentProfile();
   if (!profile || profile.role !== "agency_admin") {
     return { error: "Only agency admins can connect WhatsApp." };
-  }
-
-  const parsed = connectSchema.safeParse({
-    waba_id: input.wabaId,
-    phone_e164: input.phoneE164,
-  });
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
 
   const supabase = await createClient();
@@ -79,9 +135,23 @@ export async function connectWhatsApp(
   const admin = createAdminClient();
   const { data: existingCred } = await admin
     .from("whatsapp_credentials")
-    .select("twilio_subaccount_sid, twilio_subaccount_auth_token, sender_status, updated_at")
+    .select("twilio_subaccount_sid, twilio_subaccount_auth_token, waba_id, sender_status, updated_at")
     .eq("clinic_id", clinicId)
     .maybeSingle();
+
+  // Prioritize stored WABA ID to prevent client tampering, falling back to input.wabaId
+  const effectiveWabaId = existingCred?.waba_id || input.wabaId;
+  if (!effectiveWabaId) {
+    return { error: "WhatsApp Business Account ID is required. Please connect with Facebook first." };
+  }
+
+  const parsed = connectSchema.safeParse({
+    waba_id: effectiveWabaId,
+    phone_e164: input.phoneE164,
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
 
   // If this clinic was previously flagged for manual recovery after a subaccount
   // persistence failure, block automatic re-creation to prevent duplicate accounts.
