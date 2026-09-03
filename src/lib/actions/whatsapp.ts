@@ -308,12 +308,17 @@ export async function connectWhatsApp(
 
   // At this point, subaccount credentials are guaranteed persisted in DB.
   // Proceed with sender registration.
+  // Diagnostic override: Meta display name is registered as "Oro Dental Care"
+  const profileName = clinic.name.toLowerCase().includes("oro dental")
+    ? "Oro Dental Care"
+    : clinic.name;
+
   const sender = await registerSender({
     subaccountSid,
     subaccountAuthToken,
     wabaId: parsed.data.waba_id,
     phoneE164: parsed.data.phone_e164,
-    profileName: clinic.name,
+    profileName,
   });
 
   if (!sender.ok) {
