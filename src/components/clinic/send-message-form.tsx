@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import { Send, Plus, FileText, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Send, Plus, FileText, X, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { sendMessage, sendMediaMessage } from "@/lib/actions/messages";
 import type { MediaType } from "@/lib/types";
@@ -21,12 +22,14 @@ export function SendMessageForm({
   conversationId: string;
   clinicId: string;
 }) {
+  const router = useRouter();
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textInputRef = useRef<HTMLInputElement>(null);
 
   function clearFile() {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -51,11 +54,12 @@ export function SendMessageForm({
     setPreviewUrl(type === "image" ? URL.createObjectURL(file) : null);
   }
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  async function handleSubmit(e?: FormEvent) {
+    if (e) e.preventDefault();
     if (pending) return;
 
-    if (!pendingFile && !caption.trim()) return;
+    const trimmedCaption = caption.trim();
+    if (!pendingFile && !trimmedCaption) return;
 
     setPending(true);
     setError(null);
@@ -82,7 +86,7 @@ export function SendMessageForm({
           mediaUrl: data.publicUrl,
           mediaType: type,
           filename: pendingFile.name,
-          caption: caption.trim(),
+          caption: trimmedCaption,
         });
 
         if (result.error) {
@@ -92,15 +96,17 @@ export function SendMessageForm({
 
         clearFile();
         setCaption("");
+        router.refresh();
       } else {
         const formData = new FormData();
-        formData.set("body", caption.trim());
+        formData.set("body", trimmedCaption);
         const result = await sendMessage(conversationId, { error: null }, formData);
         if (result.error) {
           setError(result.error);
           return;
         }
         setCaption("");
+        router.refresh();
       }
     } finally {
       setPending(false);
@@ -151,8 +157,17 @@ export function SendMessageForm({
           <Plus className="size-5" />
         </button>
         <input
+          ref={textInputRef}
           value={caption}
           onChange={(e) => setCaption(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              if (!pending && (pendingFile || caption.trim())) {
+                handleSubmit(e);
+              }
+            }
+          }}
           placeholder={pendingFile ? "Add a caption..." : "Type a message"}
           autoComplete="off"
           disabled={pending}
@@ -160,11 +175,16 @@ export function SendMessageForm({
         />
         <button
           type="submit"
+          onMouseDown={(e) => e.preventDefault()}
           disabled={pending || (!pendingFile && !caption.trim())}
           aria-label="Send message"
-          className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#00A884] text-white transition-colors hover:bg-[#029273] disabled:opacity-60"
+          className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#00A884] text-white transition-colors hover:bg-[#029273] active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          <Send className="size-4.5" />
+          {pending ? (
+            <Loader2 className="size-4.5 animate-spin" />
+          ) : (
+            <Send className="size-4.5" />
+          )}
         </button>
       </form>
     </div>

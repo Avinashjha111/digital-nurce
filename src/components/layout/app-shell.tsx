@@ -46,9 +46,10 @@ export function AppShell({
   const navGroups = variant === "agency" ? agencyNavGroups : clinicNavGroups;
 
   // The inbox gets a real-WhatsApp full-bleed treatment on phones -- no
-  // outer app chrome competing with it, no card padding/border, no dead
-  // space. Desktop keeps the normal dashboard-with-sidebar look always.
+  // bottom nav competing with it, no card padding/border, full screen height.
+  // When inside a chat thread, the top header is hidden too since the thread has its own WhatsApp top bar.
   const isMobileInbox = variant === "clinic" && pathname.startsWith("/clinic/inbox");
+  const isMobileOpenThread = isMobileInbox && pathname !== "/clinic/inbox";
 
   const brand = (
     <div className="flex items-center gap-2 px-2 py-1">
@@ -85,7 +86,7 @@ export function AppShell({
         <header
           className={cn(
             "flex h-14 items-center justify-between border-b bg-background px-4",
-            isMobileInbox && "hidden md:flex"
+            isMobileOpenThread && "hidden md:flex"
           )}
         >
           <div className="flex items-center gap-2 md:hidden">
@@ -130,7 +131,7 @@ export function AppShell({
           className={cn(
             "flex-1 bg-background",
             isMobileInbox
-              ? "flex min-h-0 flex-col overflow-hidden p-0 pb-16 md:p-6 md:pb-6"
+              ? "flex min-h-0 flex-col overflow-hidden p-0 pb-0 md:p-6 md:pb-6"
               : cn("p-4 md:p-6", variant === "clinic" && "pb-20 md:pb-6")
           )}
         >
@@ -148,7 +149,7 @@ export function AppShell({
         </main>
       </div>
 
-      {variant === "clinic" && <MobileBottomNav />}
+      {variant === "clinic" && !isMobileInbox && <MobileBottomNav />}
     </div>
   );
 }
