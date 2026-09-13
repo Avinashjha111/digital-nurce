@@ -31,7 +31,7 @@ export function PrescriptionUploadForm({
 }) {
   const router = useRouter();
   const [patientId, setPatientId] = useState("");
-  const [doctorId, setDoctorId] = useState("");
+  const [doctorId, setDoctorId] = useState(doctors[0]?.id ?? "");
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);

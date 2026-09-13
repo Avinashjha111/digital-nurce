@@ -110,6 +110,12 @@ export async function signUpClinic(
     };
   }
 
+  // Create default doctor profile for this clinic
+  await admin.from("doctors").insert({
+    clinic_id: clinic.id,
+    name: fullName.toLowerCase().startsWith("dr") ? fullName : `Dr. ${fullName}`,
+  });
+
   const notifyResult = await sendBrevoEmail({
     to: ADMIN_NOTIFY_EMAIL,
     subject: `New clinic signed up: ${clinicName}`,
