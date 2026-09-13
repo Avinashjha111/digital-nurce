@@ -48,17 +48,18 @@ export async function POST(request: NextRequest) {
   }
 
   // Resilient lookup: check both digits-only and leading-plus representations
-  const { data: credential, error: credentialError } = await admin
+  const { data: credentials, error: credentialError } = await admin
     .from("whatsapp_credentials")
     .select("clinic_id, twilio_subaccount_sid, twilio_subaccount_auth_token, whatsapp_number_e164")
     .or(`whatsapp_number_e164.eq.${toDigits},whatsapp_number_e164.eq.+${toDigits},whatsapp_number_e164.eq.${rawTo}`)
-    .maybeSingle();
+    .limit(1);
 
   if (credentialError) {
     console.error(`[whatsapp webhook] credential lookup failed for To=${toDigits}:`, credentialError.message);
     return NextResponse.json({ received: true });
   }
 
+  const credential = credentials?.[0];
   if (!credential) {
     console.warn(`[whatsapp webhook] No credential found for To=${toDigits} (rawTo=${rawTo})`);
     return NextResponse.json({ received: true });
@@ -98,13 +99,19 @@ export async function POST(request: NextRequest) {
   const from = fromDigits;
   const tenDigit = fromDigits.length >= 10 ? fromDigits.slice(-10) : fromDigits;
 
-  const { data: existingPatient } = await admin
+  // Query all matching patients for this clinic across all phone representations
+  const { data: matchedPatients, error: patientLookupErr } = await admin
     .from("patients")
-    .select("id, name")
+    .select("id, name, created_at")
     .eq("clinic_id", clinicId)
     .or(`whatsapp_number.eq.${fromDigits},whatsapp_number.eq.+${fromDigits},whatsapp_number.eq.${tenDigit},whatsapp_number.eq.+91${tenDigit},whatsapp_number.eq.91${tenDigit}`)
-    .maybeSingle();
+    .order("created_at", { ascending: true });
 
+  if (patientLookupErr) {
+    console.error("[whatsapp webhook] Patient lookup error:", patientLookupErr.message);
+  }
+
+  const existingPatient = matchedPatients?.[0];
   let patientId = existingPatient?.id as string | undefined;
   let patientName = existingPatient?.name as string | undefined;
 
@@ -124,13 +131,24 @@ export async function POST(request: NextRequest) {
     patientId = newPatient.id;
   }
 
-  const { data: conversation } = await admin
-    .from("conversations")
-    .select("id, unread_count")
-    .eq("clinic_id", clinicId)
-    .eq("patient_id", patientId)
-    .maybeSingle();
+  // Find any existing conversation for this clinic and ANY matched patient record
+  const candidatePatientIds = matchedPatients && matchedPatients.length > 0
+    ? matchedPatients.map((p) => p.id)
+    : [patientId];
 
+  const { data: existingConvs, error: convLookupErr } = await admin
+    .from("conversations")
+    .select("id, unread_count, created_at")
+    .eq("clinic_id", clinicId)
+    .in("patient_id", candidatePatientIds)
+    .order("created_at", { ascending: true })
+    .limit(1);
+
+  if (convLookupErr) {
+    console.error("[whatsapp webhook] Conversation lookup error:", convLookupErr.message);
+  }
+
+  const conversation = existingConvs?.[0];
   let conversationId = conversation?.id as string | undefined;
 
   if (conversationId) {
@@ -148,7 +166,10 @@ export async function POST(request: NextRequest) {
       .select("id")
       .single();
 
-    if (convErr || !newConversation) return NextResponse.json({ received: true });
+    if (convErr || !newConversation) {
+      console.error("[whatsapp webhook] Conversation insert failed:", convErr?.message);
+      return NextResponse.json({ received: true });
+    }
     conversationId = newConversation.id;
   }
 
