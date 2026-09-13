@@ -96,12 +96,13 @@ export async function POST(request: NextRequest) {
 
   const clinicId = credential.clinic_id;
   const from = fromDigits;
+  const tenDigit = fromDigits.length >= 10 ? fromDigits.slice(-10) : fromDigits;
 
   const { data: existingPatient } = await admin
     .from("patients")
     .select("id, name")
     .eq("clinic_id", clinicId)
-    .eq("whatsapp_number", from)
+    .or(`whatsapp_number.eq.${fromDigits},whatsapp_number.eq.+${fromDigits},whatsapp_number.eq.${tenDigit},whatsapp_number.eq.+91${tenDigit},whatsapp_number.eq.91${tenDigit}`)
     .maybeSingle();
 
   let patientId = existingPatient?.id as string | undefined;
@@ -116,13 +117,17 @@ export async function POST(request: NextRequest) {
       .select("id")
       .single();
 
-    if (patientErr || !newPatient) return NextResponse.json({ received: true });
+    if (patientErr || !newPatient) {
+      console.error("[whatsapp webhook] Patient insert failed:", patientErr?.message);
+      return NextResponse.json({ received: true });
+    }
     patientId = newPatient.id;
   }
 
   const { data: conversation } = await admin
     .from("conversations")
     .select("id, unread_count")
+    .eq("clinic_id", clinicId)
     .eq("patient_id", patientId)
     .maybeSingle();
 
