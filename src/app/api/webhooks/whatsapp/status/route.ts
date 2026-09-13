@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import twilio from "twilio";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { refundMessageUnits } from "@/lib/billing";
 
 // Twilio delivers delivery/read status updates (queued/sent/delivered/
-// read/failed) to a separate callback URL from inbound messages -- unlike
-// Meta, which sent both to the same webhook (see the comment in
-// ../route.ts). This is the counterpart to that file's old `statuses` loop.
+// read/failed/undelivered) to a separate callback URL from inbound messages.
 export async function POST(request: NextRequest) {
   const rawBody = await request.text();
   const params = new URLSearchParams(rawBody);
@@ -21,7 +20,7 @@ export async function POST(request: NextRequest) {
 
   const { data: messages } = await admin
     .from("messages")
-    .select("id, clinic_id")
+    .select("id, clinic_id, status, source")
     .eq("provider_message_id", messageSid)
     .limit(1);
   const message = messages?.[0];
@@ -67,7 +66,26 @@ export async function POST(request: NextRequest) {
     console.warn("[whatsapp status webhook] Signature validation warning -- processing status update");
   }
 
-  await admin.from("messages").update({ status: messageStatus }).eq("id", message.id);
+  const isFailed = messageStatus === "failed" || messageStatus === "undelivered";
+
+  // If message failed to deliver and was not previously marked as failed, refund the message units!
+  if (isFailed && message.status !== "failed" && message.status !== "undelivered") {
+    console.log(`[whatsapp status webhook] Message ${message.id} failed delivery (${messageStatus}) -- refunding unit to clinic ${message.clinic_id}`);
+    await refundMessageUnits(message.clinic_id);
+
+    // Also update any linked reminder or follow-up status
+    await admin
+      .from("reminders")
+      .update({ status: "failed", error: `Delivery failed (${messageStatus})` })
+      .eq("provider_message_id", messageSid);
+
+    await admin
+      .from("follow_ups")
+      .update({ status: "due", error: `Delivery failed (${messageStatus})` })
+      .eq("provider_message_id", messageSid);
+  }
+
+  await admin.from("messages").update({ status: isFailed ? "failed" : messageStatus }).eq("id", message.id);
 
   return NextResponse.json({ received: true });
 }

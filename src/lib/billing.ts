@@ -17,7 +17,47 @@ export type MessageUnitKind = "standard" | "marketing_template";
 export async function deductMessageUnits(clinicId: string, kind: MessageUnitKind = "standard") {
   const units = kind === "marketing_template" ? MARKETING_TEMPLATE_UNITS : STANDARD_UNITS;
   const admin = createAdminClient();
-  await admin.rpc("deduct_clinic_messages", { p_clinic_id: clinicId, p_units: units });
+  const { error } = await admin.rpc("deduct_clinic_messages", { p_clinic_id: clinicId, p_units: units });
+  if (error) {
+    // Fallback direct update if RPC is not present
+    const { data: sub } = await admin
+      .from("clinic_subscriptions")
+      .select("id, messages_remaining")
+      .eq("clinic_id", clinicId)
+      .eq("status", "active")
+      .maybeSingle();
+    if (sub) {
+      await admin
+        .from("clinic_subscriptions")
+        .update({ messages_remaining: Math.max(0, sub.messages_remaining - units) })
+        .eq("id", sub.id);
+    }
+  }
+}
+
+/**
+ * Restores / refunds message units back to the clinic's active subscription
+ * if an outbound message fails or is reported undelivered.
+ */
+export async function refundMessageUnits(clinicId: string, kind: MessageUnitKind = "standard") {
+  const units = kind === "marketing_template" ? MARKETING_TEMPLATE_UNITS : STANDARD_UNITS;
+  const admin = createAdminClient();
+  const { error } = await admin.rpc("refund_clinic_messages", { p_clinic_id: clinicId, p_units: units });
+  if (error) {
+    // Fallback direct update if RPC is not present
+    const { data: sub } = await admin
+      .from("clinic_subscriptions")
+      .select("id, messages_remaining")
+      .eq("clinic_id", clinicId)
+      .eq("status", "active")
+      .maybeSingle();
+    if (sub) {
+      await admin
+        .from("clinic_subscriptions")
+        .update({ messages_remaining: sub.messages_remaining + units })
+        .eq("id", sub.id);
+    }
+  }
 }
 
 export type ClinicMessagingStatus =
