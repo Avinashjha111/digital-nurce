@@ -155,6 +155,11 @@ export default async function ConversationThreadPage({
                         mediaFilename={message.media_filename}
                       />
                     )}
+                    {message.source === "ai" && (
+                      <div className="flex items-center gap-1 text-[10px] font-medium text-emerald-800">
+                        <span>🤖 AI Assistant</span>
+                      </div>
+                    )}
                     {message.body && (
                       <p className="text-sm break-words text-[#111B21]">{message.body}</p>
                     )}

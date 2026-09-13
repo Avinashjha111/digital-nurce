@@ -33,6 +33,7 @@ const SOURCE_LABEL: Record<MessageSource, string> = {
   template: "Template (sent by agency)",
   reminder: "Medicine reminder",
   follow_up: "Follow-up nudge",
+  ai: "AI Auto-reply",
 };
 
 const STATUS_TONE: Record<MessageStatus, StatusTone> = {

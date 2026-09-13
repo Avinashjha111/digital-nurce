@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Bot, UserCheck } from "lucide-react";
 import { toggleHumanAttention } from "@/lib/actions/messages";
 import { cn } from "@/lib/utils";
 
@@ -18,13 +18,13 @@ export function HumanAttentionToggle({
     <button
       type="button"
       disabled={pending}
-      aria-label={active ? "Human attention required" : "Mark attention needed"}
-      title={active ? "Human attention required" : "Mark attention needed"}
+      aria-label={active ? "Human attention required (click to switch to AI)" : "AI Assistant Active (click to take manual control)"}
+      title={active ? "Doctor in control / Attention needed (click to switch back to AI)" : "AI Assistant active (click to take manual control)"}
       className={cn(
-        "flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50",
+        "flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50",
         active
-          ? "border-transparent bg-white text-red-600"
-          : "border-white/40 bg-white/10 text-white hover:bg-white/20"
+          ? "border-amber-300 bg-amber-500 text-white shadow-sm hover:bg-amber-600"
+          : "border-emerald-300/40 bg-emerald-700/80 text-white hover:bg-emerald-700"
       )}
       onClick={() =>
         startTransition(() => {
@@ -32,10 +32,17 @@ export function HumanAttentionToggle({
         })
       }
     >
-      <AlertCircle className="size-4 shrink-0" />
-      <span className="hidden lg:inline">
-        {active ? "Attention needed" : "Mark attention"}
-      </span>
+      {active ? (
+        <>
+          <AlertCircle className="size-3.5 shrink-0" />
+          <span>Doctor Control</span>
+        </>
+      ) : (
+        <>
+          <Bot className="size-3.5 shrink-0 text-emerald-200" />
+          <span>AI Active</span>
+        </>
+      )}
     </button>
   );
 }

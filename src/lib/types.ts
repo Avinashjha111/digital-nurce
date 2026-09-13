@@ -87,7 +87,7 @@ export type Conversation = {
 
 export type MessageDirection = "inbound" | "outbound";
 export type MessageStatus = "queued" | "sent" | "delivered" | "read" | "failed";
-export type MessageSource = "inbound" | "manual" | "template" | "reminder" | "follow_up";
+export type MessageSource = "inbound" | "manual" | "template" | "reminder" | "follow_up" | "ai";
 
 export type MediaType = "image" | "document" | "video" | "audio";
 

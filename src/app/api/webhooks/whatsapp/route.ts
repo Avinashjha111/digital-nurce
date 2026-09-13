@@ -3,7 +3,9 @@ import twilio from "twilio";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizePhone } from "@/lib/phone";
 import { sendPushToClinic } from "@/lib/push";
-import { deductMessageUnits } from "@/lib/billing";
+import { deductMessageUnits, getClinicMessagingStatus } from "@/lib/billing";
+import { generateClinicAssistantReply } from "@/lib/ai/assistant";
+import { sendWhatsAppMessage } from "@/lib/whatsapp/provider";
 
 const MEDIA_EXTENSION_BY_MIME: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -138,7 +140,7 @@ export async function POST(request: NextRequest) {
 
   const { data: existingConvs, error: convLookupErr } = await admin
     .from("conversations")
-    .select("id, unread_count, created_at")
+    .select("id, unread_count, created_at, human_attention")
     .eq("clinic_id", clinicId)
     .in("patient_id", candidatePatientIds)
     .order("created_at", { ascending: true })
@@ -253,6 +255,147 @@ export async function POST(request: NextRequest) {
     body: notificationBody,
     url: `/clinic/inbox/${conversationId}`,
   });
+
+  // AI Assistant Auto-Reply & Emergency Triage:
+  // Runs if the conversation is not under active doctor intervention (human_attention is false)
+  const isHumanAttention = Boolean(conversation?.human_attention);
+
+  if (!isHumanAttention && body.trim().length > 0) {
+    try {
+      const messagingStatus = await getClinicMessagingStatus(clinicId);
+      if (messagingStatus.canSend) {
+        // Fetch clinic details
+        const { data: clinicData } = await admin
+          .from("clinics")
+          .select("name, address, city, phone")
+          .eq("id", clinicId)
+          .maybeSingle();
+
+        // Fetch primary doctor details
+        const { data: doctorData } = await admin
+          .from("doctors")
+          .select("name, specialization, bio, consultation_days, morning_start, morning_end, evening_start, evening_end")
+          .eq("clinic_id", clinicId)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        // Fetch patient's active prescribed medicines
+        const { data: prescriptions } = await admin
+          .from("prescriptions")
+          .select("id")
+          .eq("patient_id", patientId)
+          .eq("status", "approved");
+
+        let activeMedicines: Array<{
+          name: string;
+          dosage?: string | null;
+          frequency?: string | null;
+          timings?: string[] | null;
+          instruction?: string | null;
+        }> = [];
+
+        if (prescriptions && prescriptions.length > 0) {
+          const presIds = prescriptions.map((p) => p.id);
+          const { data: meds } = await admin
+            .from("prescription_medicines")
+            .select("name, dosage, frequency, timings, instruction")
+            .in("prescription_id", presIds);
+          if (meds) activeMedicines = meds;
+        }
+
+        // Fetch recent conversation history
+        const { data: historyMsgs } = await admin
+          .from("messages")
+          .select("direction, body, created_at")
+          .eq("conversation_id", conversationId)
+          .order("created_at", { ascending: false })
+          .limit(6);
+
+        const conversationHistory = (historyMsgs ?? [])
+          .reverse()
+          .map((m) => ({ direction: m.direction as "inbound" | "outbound", body: m.body }));
+
+        const doctorTimings = doctorData
+          ? [
+              doctorData.consultation_days ? `Days: ${doctorData.consultation_days}` : null,
+              doctorData.morning_start && doctorData.morning_end
+                ? `Morning: ${doctorData.morning_start} - ${doctorData.morning_end}`
+                : null,
+              doctorData.evening_start && doctorData.evening_end
+                ? `Evening: ${doctorData.evening_start} - ${doctorData.evening_end}`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(", ")
+          : null;
+
+        const aiResponse = await generateClinicAssistantReply({
+          clinicName: clinicData?.name || "Our Clinic",
+          clinicAddress: clinicData?.address,
+          clinicCity: clinicData?.city,
+          clinicPhone: clinicData?.phone,
+          doctorName: doctorData?.name,
+          doctorSpecialization: doctorData?.specialization,
+          doctorBio: doctorData?.bio,
+          doctorTimings,
+          patientName: patientName ?? "Patient",
+          patientPhone: from,
+          activeMedicines,
+          conversationHistory,
+          latestMessage: body,
+        });
+
+        if (aiResponse && aiResponse.reply) {
+          // If Gemini flagged urgent or patient wants doctor
+          if (aiResponse.isUrgent) {
+            await admin
+              .from("conversations")
+              .update({ human_attention: true })
+              .eq("id", conversationId);
+
+            await sendPushToClinic(clinicId, {
+              title: `🚨 Urgent: ${patientName ?? "Patient"}`,
+              body: aiResponse.urgencyReason || "Patient requires immediate doctor attention.",
+              url: `/clinic/inbox/${conversationId}`,
+            });
+          }
+
+          // Send AI response to WhatsApp via Twilio
+          const sendResult = await sendWhatsAppMessage({
+            subaccountSid: credential.twilio_subaccount_sid,
+            subaccountAuthToken: credential.twilio_subaccount_auth_token,
+            from: credential.whatsapp_number_e164,
+            to: from,
+            body: aiResponse.reply,
+          });
+
+          // Insert AI reply into public.messages
+          await admin.from("messages").insert({
+            conversation_id: conversationId,
+            clinic_id: clinicId,
+            patient_id: patientId,
+            direction: "outbound",
+            source: "ai",
+            body: aiResponse.reply,
+            provider_message_id: sendResult.ok ? sendResult.providerMessageId : null,
+            status: sendResult.ok ? "sent" : "failed",
+          });
+
+          if (sendResult.ok) {
+            await deductMessageUnits(clinicId);
+          }
+
+          await admin
+            .from("conversations")
+            .update({ last_message_at: new Date().toISOString() })
+            .eq("id", conversationId);
+        }
+      }
+    } catch (aiErr) {
+      console.error("[whatsapp webhook] AI Auto-Reply error:", aiErr);
+    }
+  }
 
   return NextResponse.json({ received: true });
 }
