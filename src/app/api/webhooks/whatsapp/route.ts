@@ -371,7 +371,7 @@ export async function POST(request: NextRequest) {
           });
 
           // Insert AI reply into public.messages
-          await admin.from("messages").insert({
+          const { error: msgInsertErr } = await admin.from("messages").insert({
             conversation_id: conversationId,
             clinic_id: clinicId,
             patient_id: patientId,
@@ -381,6 +381,21 @@ export async function POST(request: NextRequest) {
             provider_message_id: sendResult.ok ? sendResult.providerMessageId : null,
             status: sendResult.ok ? "sent" : "failed",
           });
+
+          // If 'ai' enum value is not yet in Postgres, fallback to 'manual' so message is never lost
+          if (msgInsertErr) {
+            console.warn("[whatsapp webhook] AI insert failed, retrying with source manual:", msgInsertErr.message);
+            await admin.from("messages").insert({
+              conversation_id: conversationId,
+              clinic_id: clinicId,
+              patient_id: patientId,
+              direction: "outbound",
+              source: "manual",
+              body: aiResponse.reply,
+              provider_message_id: sendResult.ok ? sendResult.providerMessageId : null,
+              status: sendResult.ok ? "sent" : "failed",
+            });
+          }
 
           if (sendResult.ok) {
             await deductMessageUnits(clinicId);
