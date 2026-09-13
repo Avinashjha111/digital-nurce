@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
-import { dateSeparatorLabel } from "@/lib/date-separator";
+import { dateSeparatorLabel, formatMessageTime } from "@/lib/date-separator";
 import { chatThemeBackground } from "@/lib/chat-theme";
 import { SendMessageForm } from "@/components/clinic/send-message-form";
 import { ServiceWindowLocked } from "@/components/clinic/service-window-locked";
@@ -160,10 +160,7 @@ export default async function ConversationThreadPage({
                     )}
                     <div className="flex items-center justify-end gap-1 self-end">
                       <span className="text-[10px] text-black/45">
-                        {new Date(message.created_at).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
+                        {formatMessageTime(message.created_at)}
                       </span>
                       {message.direction === "outbound" && (
                         <MessageStatusTicks status={message.status} />

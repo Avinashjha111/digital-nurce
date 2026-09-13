@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { WhatsAppAvatar } from "@/components/clinic/whatsapp-avatar";
 import { InboxShell } from "@/components/clinic/inbox-shell";
+import { formatMessageTime } from "@/lib/date-separator";
 import { cn } from "@/lib/utils";
 import type { Conversation, Message, Patient } from "@/lib/types";
 
@@ -79,10 +80,7 @@ export default async function ClinicInboxLayout({
                     {conversation.patients?.name ?? "Unknown"}
                   </span>
                   <span className="shrink-0 text-xs text-muted-foreground">
-                    {new Date(conversation.last_message_at).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    {formatMessageTime(conversation.last_message_at)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-2">
