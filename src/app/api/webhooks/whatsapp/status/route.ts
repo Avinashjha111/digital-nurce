@@ -34,15 +34,25 @@ export async function POST(request: NextRequest) {
   if (!credential) return NextResponse.json({ received: true });
 
   const signature = request.headers.get("x-twilio-signature");
-  const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/whatsapp/status`;
+  const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "digitalnurse.in";
+  const proto = request.headers.get("x-forwarded-proto") || "https";
+  const incomingUrl = `${proto}://${host}/api/webhooks/whatsapp/status`;
+  const envUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/whatsapp/status`;
+
   const validSignature =
     !!signature &&
-    twilio.validateRequest(
+    (twilio.validateRequest(
       credential.twilio_subaccount_auth_token,
       signature,
-      webhookUrl,
+      incomingUrl,
       paramsObject
-    );
+    ) ||
+      twilio.validateRequest(
+        credential.twilio_subaccount_auth_token,
+        signature,
+        envUrl,
+        paramsObject
+      ));
   if (!validSignature) {
     return new NextResponse("Invalid signature", { status: 401 });
   }

@@ -131,8 +131,19 @@ export async function createWhatsAppTemplate({
   return { ok: true, contentSid: json.sid };
 }
 
+export type NormalizedTemplateStatus = "pending" | "approved" | "rejected" | "disabled";
+
+export function normalizeTemplateStatus(rawStatus?: string | null): NormalizedTemplateStatus {
+  const s = String(rawStatus ?? "").trim().toLowerCase();
+  if (s === "approved") return "approved";
+  if (s === "rejected") return "rejected";
+  if (s === "disabled" || s === "paused") return "disabled";
+  // Maps 'received', 'pending', 'submitted', 'in_review', etc. to 'pending'
+  return "pending";
+}
+
 export type SubmitApprovalResult =
-  | { ok: true; status: string }
+  | { ok: true; status: NormalizedTemplateStatus }
   | { ok: false; error: string };
 
 export async function submitTemplateForApproval({
@@ -162,11 +173,11 @@ export async function submitTemplateForApproval({
     return { ok: false, error: twilioApiErrorMessage(json, `Twilio API error (${res.status})`) };
   }
 
-  return { ok: true, status: (json.status ?? "received").toLowerCase() };
+  return { ok: true, status: normalizeTemplateStatus(json?.status) };
 }
 
 export type TemplateStatusResult =
-  | { ok: true; status: string; rejectionReason: string | null }
+  | { ok: true; status: NormalizedTemplateStatus; rejectionReason: string | null }
   | { ok: false; error: string };
 
 export async function fetchTemplateStatus({
@@ -190,7 +201,8 @@ export async function fetchTemplateStatus({
   const whatsapp = json?.whatsapp;
   return {
     ok: true,
-    status: (whatsapp?.status ?? "pending").toLowerCase(),
+    status: normalizeTemplateStatus(whatsapp?.status),
     rejectionReason: whatsapp?.rejection_reason || null,
   };
 }
+

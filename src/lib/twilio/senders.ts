@@ -23,46 +23,56 @@ export type TwilioSender = {
 
 type SendersApiError = { ok: false; error: string };
 
-// Safe known field names that are allowed to be identified if validation fails
-const SAFE_VALIDATION_FIELDS = new Set([
-  "profile",
-  "profile.name",
-  "name",
-  "sender_id",
-  "phone_number",
-  "waba_id",
-  "configuration.waba_id",
-  "verification_method",
-  "configuration.verification_method",
-]);
+// Safe parser for Twilio API validation errors and details
+function extractSafeErrorMessage(json: unknown): string | null {
+  if (!json || typeof json !== "object") return null;
+  const obj = json as Record<string, unknown>;
 
-function extractSafeFieldNames(rawDetails: unknown): string[] {
-  if (!rawDetails) return [];
-  const fieldSet = new Set<string>();
+  const detailParts: string[] = [];
 
-  if (Array.isArray(rawDetails)) {
-    for (const item of rawDetails) {
+  const details = obj.details ?? obj.errors;
+  if (Array.isArray(details)) {
+    for (const item of details) {
       if (item && typeof item === "object") {
-        const field = String(
-          (item as { field?: string; property?: string }).field ??
-            (item as { property?: string }).property ??
-            ""
-        ).trim().toLowerCase();
-        if (field && SAFE_VALIDATION_FIELDS.has(field)) {
-          fieldSet.add(field);
+        const prop = (item as Record<string, unknown>).property ?? (item as Record<string, unknown>).field;
+        const msg = (item as Record<string, unknown>).message ?? (item as Record<string, unknown>).description;
+        if (prop && msg) {
+          detailParts.push(`${String(prop)}: ${String(msg)}`);
+        } else if (msg) {
+          detailParts.push(String(msg));
+        } else if (prop) {
+          detailParts.push(String(prop));
+        }
+      } else if (typeof item === "string" && item.trim()) {
+        detailParts.push(item.trim());
+      }
+    }
+  } else if (details && typeof details === "object") {
+    const d = details as Record<string, unknown>;
+    if (d.error_user_msg) {
+      detailParts.push(String(d.error_user_msg));
+    } else if (d.message) {
+      detailParts.push(String(d.message));
+    } else {
+      for (const [k, v] of Object.entries(d)) {
+        if (typeof v === "string" || typeof v === "number") {
+          detailParts.push(`${k}: ${v}`);
         }
       }
     }
-  } else if (typeof rawDetails === "object") {
-    for (const key of Object.keys(rawDetails as Record<string, unknown>)) {
-      const lowerKey = key.trim().toLowerCase();
-      if (SAFE_VALIDATION_FIELDS.has(lowerKey)) {
-        fieldSet.add(lowerKey);
-      }
-    }
+  } else if (typeof details === "string" && details.trim()) {
+    detailParts.push(details.trim());
   }
 
-  return Array.from(fieldSet);
+  if (detailParts.length > 0) {
+    return detailParts.join("; ");
+  }
+
+  if (typeof obj.message === "string" && obj.message.trim()) {
+    return obj.message.trim();
+  }
+
+  return null;
 }
 
 async function parseSenderResponse(
@@ -71,22 +81,18 @@ async function parseSenderResponse(
   const json = await res.json().catch(() => null);
   if (!res.ok) {
     const code = (json as { code?: number | string } | null)?.code;
-    const rawDetails =
-      (json as { details?: unknown } | null)?.details ??
-      (json as { errors?: unknown } | null)?.errors;
-    const safeFields = extractSafeFieldNames(rawDetails);
+    const detailMsg = extractSafeErrorMessage(json);
 
-    // Safe server-side diagnostic logging: only HTTP status, error code, and safe field names
+    // Safe server-side diagnostic logging
     console.error("[Twilio Senders API Error]", {
       status: res.status,
       code: code ?? "none",
-      invalidFields: safeFields.length > 0 ? safeFields : undefined,
+      details: detailMsg ?? undefined,
     });
 
-    let clientMessage = "WhatsApp sender registration failed. Please verify the sender details and try again.";
-    if (safeFields.length > 0) {
-      clientMessage += ` (Invalid fields: ${safeFields.join(", ")})`;
-    }
+    let clientMessage =
+      detailMsg ||
+      "WhatsApp sender registration failed. Please verify the sender details and try again.";
 
     if (code) {
       clientMessage = `[Error ${code}] ${clientMessage}`;
