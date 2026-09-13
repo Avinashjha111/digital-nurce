@@ -120,13 +120,21 @@ export async function registerSender({
   wabaId,
   phoneE164,
   profileName,
+  webhookUrl,
+  statusCallbackUrl,
 }: {
   subaccountSid: string;
   subaccountAuthToken: string;
   wabaId: string;
   phoneE164: string; // digits only, no "+"
   profileName: string;
+  webhookUrl?: string;
+  statusCallbackUrl?: string;
 }): Promise<{ ok: true; sender: TwilioSender } | SendersApiError> {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://digitalnurse.in";
+  const callback = webhookUrl || `${appUrl}/api/webhooks/whatsapp`;
+  const statusCallback = statusCallbackUrl || `${appUrl}/api/webhooks/whatsapp/status`;
+
   const payload = {
     sender_id: `whatsapp:+${phoneE164}`,
     profile: {
@@ -134,6 +142,12 @@ export async function registerSender({
     },
     configuration: {
       waba_id: wabaId,
+    },
+    webhook: {
+      callback_url: callback,
+      callback_method: "POST",
+      status_callback_url: statusCallback,
+      status_callback_method: "POST",
     },
   };
 
