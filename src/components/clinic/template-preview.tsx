@@ -67,17 +67,34 @@ export function TemplatePreview({
           <p className="font-semibold text-[#111B21]">{renderWhatsAppMarkdown(displayHeader)}</p>
         )}
 
-        {(headerType === "image" || headerType === "video" || headerType === "document") && (
-          <div className="flex h-20 items-center justify-center rounded-md bg-muted text-muted-foreground">
-            {headerType === "image" && <ImageIcon className="size-5" />}
-            {headerType === "video" && <Video className="size-5" />}
-            {headerType === "document" && <FileText className="size-5" />}
+        {headerType === "image" && (
+          <div className="flex h-28 flex-col items-center justify-center gap-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <ImageIcon className="size-6" />
+            <span className="text-[11px] font-medium">Header Image</span>
+          </div>
+        )}
+
+        {headerType === "video" && (
+          <div className="flex h-28 flex-col items-center justify-center gap-1 rounded-md bg-sky-50 text-sky-700 border border-sky-200">
+            <Video className="size-6" />
+            <span className="text-[11px] font-medium">Header Video</span>
+          </div>
+        )}
+
+        {headerType === "document" && (
+          <div className="flex h-20 items-center gap-2.5 rounded-md bg-amber-50 px-3 text-amber-800 border border-amber-200">
+            <FileText className="size-6 shrink-0" />
+            <div className="flex flex-col min-w-0">
+              <span className="text-xs font-semibold truncate">Document Header</span>
+              <span className="text-[10px] text-amber-600">PDF • Attachment</span>
+            </div>
           </div>
         )}
 
         {headerType === "location" && (
-          <div className="flex h-20 items-center justify-center rounded-md bg-muted text-muted-foreground">
-            <MapPin className="size-5" />
+          <div className="flex h-24 flex-col items-center justify-center gap-1 rounded-md bg-rose-50 text-rose-700 border border-rose-200">
+            <MapPin className="size-6" />
+            <span className="text-[11px] font-medium">Location Map</span>
           </div>
         )}
 

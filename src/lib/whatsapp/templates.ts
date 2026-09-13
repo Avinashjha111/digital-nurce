@@ -51,11 +51,25 @@ export type TemplateButtonInput =
   | { type: "URL"; text: string; url: string }
   | { type: "PHONE_NUMBER"; text: string; phoneNumber: string };
 
-export type TemplateHeaderInput = { type: "none" } | { type: "text"; text: string; example?: string };
+export type TemplateHeaderType = "none" | "text" | "image" | "video" | "document";
 
 export type CreateTemplateResult =
   | { ok: true; contentSid: string }
   | { ok: false; error: string };
+
+export type CreateWhatsAppTemplateOptions = {
+  subaccountSid: string;
+  subaccountAuthToken: string;
+  name: string;
+  language: string;
+  bodyText: string;
+  examples: string[];
+  buttons: TemplateButtonInput[];
+  headerType?: TemplateHeaderType;
+  headerText?: string;
+  mediaUrl?: string;
+  footerText?: string;
+};
 
 export async function createWhatsAppTemplate({
   subaccountSid,
@@ -65,15 +79,11 @@ export async function createWhatsAppTemplate({
   bodyText,
   examples,
   buttons,
-}: {
-  subaccountSid: string;
-  subaccountAuthToken: string;
-  name: string;
-  language: string;
-  bodyText: string;
-  examples: string[];
-  buttons: TemplateButtonInput[];
-}): Promise<CreateTemplateResult> {
+  headerType = "none",
+  headerText,
+  mediaUrl,
+  footerText,
+}: CreateWhatsAppTemplateOptions): Promise<CreateTemplateResult> {
   const variables: Record<string, string> = {};
   examples.forEach((value, i) => {
     variables[String(i + 1)] = value;
@@ -88,26 +98,88 @@ export async function createWhatsAppTemplate({
     };
   }
 
-  const types: Record<string, unknown> =
-    quickReplies.length > 0
-      ? {
-          "twilio/quick-reply": {
-            body: bodyText,
-            actions: quickReplies.map((b) => ({ title: b.text, id: b.text })),
-          },
-        }
-      : ctaButtons.length > 0
-        ? {
-            "twilio/card": {
-              title: bodyText,
-              actions: ctaButtons.map((b) =>
-                b.type === "URL"
-                  ? { type: "URL", title: b.text, url: b.url }
-                  : { type: "PHONE_NUMBER", title: b.text, phone: `+${b.phoneNumber}` }
-              ),
-            },
-          }
-        : { "twilio/text": { body: bodyText } };
+  const isMedia = headerType === "image" || headerType === "video" || headerType === "document";
+  
+  // Default clean fallback samples if media URL is missing or for approval
+  const sampleMedia = mediaUrl || (
+    headerType === "video"
+      ? "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
+      : headerType === "document"
+      ? "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+      : "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/1.png"
+  );
+
+  const actions = [
+    ...quickReplies.map((b) => ({ type: "QUICK_REPLY", title: b.text, id: b.text })),
+    ...ctaButtons.map((b) =>
+      b.type === "URL"
+        ? { type: "URL", title: b.text, url: b.url }
+        : { type: "PHONE_NUMBER", title: b.text, phone: `+${b.phoneNumber}` }
+    ),
+  ];
+
+  let types: Record<string, unknown> = {};
+
+  if (isMedia) {
+    if (actions.length > 0) {
+      types = {
+        "twilio/card": {
+          title: bodyText,
+          media: [sampleMedia],
+          actions,
+        },
+      };
+    } else {
+      types = {
+        "twilio/media": {
+          body: bodyText,
+          media: [sampleMedia],
+        },
+      };
+    }
+  } else if (headerType === "text" && headerText) {
+    if (actions.length > 0) {
+      types = {
+        "twilio/card": {
+          title: headerText,
+          subtitle: bodyText,
+          actions,
+        },
+      };
+    } else {
+      types = {
+        "twilio/card": {
+          title: headerText,
+          subtitle: bodyText,
+        },
+      };
+    }
+  } else {
+    // None header
+    if (quickReplies.length > 0) {
+      types = {
+        "twilio/quick-reply": {
+          body: bodyText,
+          actions: quickReplies.map((b) => ({ title: b.text, id: b.text })),
+        },
+      };
+    } else if (ctaButtons.length > 0) {
+      types = {
+        "twilio/call-to-action": {
+          body: bodyText,
+          actions: ctaButtons.map((b) =>
+            b.type === "URL"
+              ? { type: "URL", title: b.text, url: b.url }
+              : { type: "PHONE_NUMBER", title: b.text, phone: `+${b.phoneNumber}` }
+          ),
+        },
+      };
+    } else {
+      types = {
+        "twilio/text": { body: bodyText },
+      };
+    }
+  }
 
   const res = await fetch(CONTENT_API_BASE, {
     method: "POST",

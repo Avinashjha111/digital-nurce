@@ -73,19 +73,7 @@ export async function createTemplate(
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
 
-  // Twilio's Content API field shapes for these aren't confirmed anywhere
-  // reachable -- rather than guess and risk a malformed template, they're
-  // blocked here with a clear message. Nothing the app sends automatically
-  // (reminders/follow-ups/bulk-send) needs any of these.
-  if (parsed.data.header_type === "image" || parsed.data.header_type === "video" || parsed.data.header_type === "document") {
-    return { error: "Media headers aren't supported yet -- use a text-only or no-header template." };
-  }
-  if (parsed.data.header_type === "location") {
-    return { error: "Location headers aren't supported yet." };
-  }
-  if (parsed.data.footer_text) {
-    return { error: "Footer text isn't supported yet -- leave it blank." };
-  }
+  const mediaUrl = String(formData.get("media_url") ?? "").trim() || undefined;
 
   let buttons: TemplateButtonInput[] = [];
   const buttonsRaw = String(formData.get("buttons_json") ?? "[]");
@@ -93,7 +81,7 @@ export async function createTemplate(
     const parsedButtons = JSON.parse(buttonsRaw);
     const validated = z.array(buttonSchema).safeParse(parsedButtons);
     if (!validated.success) {
-      return { error: "One of the buttons is missing required fields, or uses an unsupported type (copy-code buttons aren't supported yet)." };
+      return { error: "One of the buttons is missing required fields, or uses an unsupported type." };
     }
     buttons = validated.data;
   } catch {
@@ -126,13 +114,6 @@ export async function createTemplate(
     return { error: "This clinic has not connected WhatsApp yet." };
   }
 
-  if (parsed.data.header_type === "text" && parsed.data.header_text) {
-    return {
-      error:
-        "Text headers aren't supported yet on Twilio -- put everything in the body text for now.",
-    };
-  }
-
   const createResult = await createWhatsAppTemplate({
     subaccountSid: credential.twilio_subaccount_sid,
     subaccountAuthToken: credential.twilio_subaccount_auth_token,
@@ -141,6 +122,10 @@ export async function createTemplate(
     bodyText: parsed.data.body_text,
     examples,
     buttons,
+    headerType: parsed.data.header_type as "none" | "text" | "image" | "video" | "document",
+    headerText: parsed.data.header_text,
+    mediaUrl,
+    footerText: parsed.data.footer_text,
   });
 
   if (!createResult.ok) {
@@ -165,10 +150,10 @@ export async function createTemplate(
     category: parsed.data.category,
     language: parsed.data.language,
     body_text: parsed.data.body_text,
-    header_type: "none",
-    header_text: null,
-    header_media_path: null,
-    footer_text: null,
+    header_type: parsed.data.header_type,
+    header_text: parsed.data.header_text || null,
+    header_media_path: mediaUrl || null,
+    footer_text: parsed.data.footer_text || null,
     buttons,
     twilio_content_sid: createResult.contentSid,
     status: approvalResult.status,
