@@ -34,6 +34,11 @@ export type AssistantReply = {
   reply: string;
   isUrgent: boolean;
   urgencyReason: string | null;
+  bookedAppointment?: {
+    date: string;
+    time: string;
+    status: "confirmed" | "requested";
+  } | null;
 };
 
 const assistantResponseSchema = {
@@ -52,8 +57,29 @@ const assistantResponseSchema = {
       nullable: true,
       description: "Short reason if urgent (e.g. 'Severe bleeding reported', 'Patient requested immediate doctor call').",
     },
+    booked_appointment: {
+      type: "object",
+      nullable: true,
+      description: "Populate if the patient agreed on or requested a specific appointment date and time during the chat (e.g. 'Aaj shaam 6 baje', 'tomorrow 11 am'). Otherwise null.",
+      properties: {
+        date: {
+          type: "string",
+          description: "Appointment date formatted as YYYY-MM-DD (resolve relative words like 'aaj'/'today' to current date, 'kal'/'tomorrow' to next day).",
+        },
+        time: {
+          type: "string",
+          description: "Appointment time (e.g. '06:00 PM', '11:00 AM').",
+        },
+        status: {
+          type: "string",
+          enum: ["confirmed", "requested"],
+          description: "'confirmed' if timing fits consultation hours and confirmed by assistant, 'requested' if pending confirmation.",
+        },
+      },
+      required: ["date", "time", "status"],
+    },
   },
-  required: ["reply", "is_urgent", "urgency_reason"],
+  required: ["reply", "is_urgent", "urgency_reason", "booked_appointment"],
 };
 
 export async function generateClinicAssistantReply(
@@ -100,7 +126,13 @@ export async function generateClinicAssistantReply(
           .join("\n")
       : "No previous messages.";
 
+  const now = new Date();
+  const todayDateStr = now.toISOString().slice(0, 10);
+  const dayName = now.toLocaleDateString("en-US", { weekday: "long" });
+
   const systemInstruction = `You are the friendly, human-like WhatsApp clinic coordinator for "${context.clinicName}". You chat with patients on WhatsApp like a warm, helpful clinic receptionist.
+
+TODAY'S REFERENCE DATE: ${todayDateStr} (${dayName})
 
 CLINIC INFO:
 ${clinicInfo}
@@ -122,9 +154,12 @@ CRITICAL RULES:
    - Always include 1-2 warm, friendly emojis (😊, 👍, 🦷, 📍, 🙏, ⏰).
 4. NO REPETITION:
    - Never repeat robotic boilerplate like "Humne aapka appointment request note kar liya hai." Be casual and clear (e.g. "Perfect! Shaam 6:00 baje milte hain clinic par! 😊👍").
-5. LANGUAGE:
+5. APPOINTMENT BOOKING:
+   - When a patient agrees on or specifies an appointment date & time (e.g. "Aaj shaam 6 baje", "kal subah 11 baje"), populate the booked_appointment field with { date: "YYYY-MM-DD", time: "HH:MM AM/PM", status: "confirmed" }.
+   - If they are only asking timings or not confirming a slot, keep booked_appointment = null.
+6. LANGUAGE:
    - Match the patient's language naturally (Hinglish/Hindi/English). If they speak casual Hinglish ("Doctor kab milenge"), reply in friendly Hinglish.
-6. MEDICAL SAFETY & EMERGENCIES:
+7. MEDICAL SAFETY & EMERGENCIES:
    - Never prescribe new medicines.
    - If patient reports severe acute pain, continuous bleeding, difficulty breathing, or insists on talking to the doctor ("doctor se baat karni hai", "call doctor"), set is_urgent = true and reassure them warmly that you have alerted the doctor.`;
 
@@ -134,7 +169,7 @@ ${historyFormatted}
 NEW INCOMING MESSAGE FROM PATIENT:
 "${context.latestMessage}"
 
-Generate your natural, short WhatsApp reply following the rules.`;
+Generate your natural, short WhatsApp reply and populate booked_appointment if an appointment was agreed upon.`;
 
   try {
     const res = await fetch(
@@ -148,7 +183,7 @@ Generate your natural, short WhatsApp reply following the rules.`;
           generationConfig: {
             responseMimeType: "application/json",
             responseSchema: assistantResponseSchema,
-            temperature: 0.3,
+            temperature: 0.2,
           },
         }),
       }
@@ -168,12 +203,18 @@ Generate your natural, short WhatsApp reply following the rules.`;
       reply: string;
       is_urgent: boolean;
       urgency_reason: string | null;
+      booked_appointment?: {
+        date: string;
+        time: string;
+        status: "confirmed" | "requested";
+      } | null;
     };
 
     return {
       reply: parsed.reply,
       isUrgent: Boolean(parsed.is_urgent),
       urgencyReason: parsed.urgency_reason ?? null,
+      bookedAppointment: parsed.booked_appointment ?? null,
     };
   } catch (err) {
     console.error("[Gemini Assistant Execution Error]", err);

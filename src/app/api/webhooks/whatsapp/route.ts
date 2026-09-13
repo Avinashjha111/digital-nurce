@@ -404,6 +404,74 @@ export async function POST(request: NextRequest) {
             await deductMessageUnits(clinicId);
           }
 
+          // Automatic Appointment Booking extraction & sync with dashboard
+          if (aiResponse.bookedAppointment) {
+            const { date, time, status } = aiResponse.bookedAppointment;
+            try {
+              // Find if patient has any active follow up
+              const { data: followUp } = await admin
+                .from("follow_ups")
+                .select("id")
+                .eq("patient_id", patientId)
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              // Check if appointment request already exists for this patient & date
+              const { data: existingAppt } = await admin
+                .from("appointment_requests")
+                .select("id")
+                .eq("patient_id", patientId)
+                .eq("preferred_date", date)
+                .maybeSingle();
+
+              if (existingAppt) {
+                await admin
+                  .from("appointment_requests")
+                  .update({
+                    preferred_time: time,
+                    status: status || "confirmed",
+                  })
+                  .eq("id", existingAppt.id);
+              } else {
+                const insertPayload: Record<string, any> = {
+                  clinic_id: clinicId,
+                  patient_id: patientId,
+                  preferred_date: date,
+                  preferred_time: time,
+                  status: status || "confirmed",
+                };
+                if (followUp?.id) {
+                  insertPayload.follow_up_id = followUp.id;
+                }
+
+                const { error: apptErr } = await admin
+                  .from("appointment_requests")
+                  .insert(insertPayload);
+
+                if (apptErr) {
+                  console.warn("[whatsapp webhook] Appointment insert warning:", apptErr.message);
+                }
+              }
+
+              if (followUp?.id) {
+                await admin
+                  .from("follow_ups")
+                  .update({ status: "appointment_requested" })
+                  .eq("id", followUp.id);
+              }
+
+              // Send push notification to clinic staff
+              await sendPushToClinic(clinicId, {
+                title: `📅 New Appointment: ${patientName ?? "Patient"}`,
+                body: `${date} at ${time} (${status === "confirmed" ? "Confirmed" : "Requested"})`,
+                url: `/clinic/dashboard`,
+              });
+            } catch (apptErr) {
+              console.error("[whatsapp webhook] Error processing appointment booking:", apptErr);
+            }
+          }
+
           await admin
             .from("conversations")
             .update({ last_message_at: new Date().toISOString() })
