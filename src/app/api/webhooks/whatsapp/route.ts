@@ -267,14 +267,14 @@ export async function POST(request: NextRequest) {
         // Fetch clinic details
         const { data: clinicData } = await admin
           .from("clinics")
-          .select("name, address, city, phone")
+          .select("name, address, city, phone, google_maps_link, services, consultation_fee")
           .eq("id", clinicId)
           .maybeSingle();
 
         // Fetch primary doctor details
         const { data: doctorData } = await admin
           .from("doctors")
-          .select("name, specialization, bio, consultation_days, morning_start, morning_end, evening_start, evening_end")
+          .select("name, specialization, bio, consultation_days, morning_start, morning_end, evening_start, evening_end, consultation_fee, services")
           .eq("clinic_id", clinicId)
           .order("created_at", { ascending: true })
           .limit(1)
@@ -335,6 +335,9 @@ export async function POST(request: NextRequest) {
           clinicAddress: clinicData?.address,
           clinicCity: clinicData?.city,
           clinicPhone: clinicData?.phone,
+          clinicGoogleMapsLink: clinicData?.google_maps_link,
+          clinicServices: doctorData?.services || clinicData?.services,
+          consultationFee: doctorData?.consultation_fee || clinicData?.consultation_fee,
           doctorName: doctorData?.name,
           doctorSpecialization: doctorData?.specialization,
           doctorBio: doctorData?.bio,

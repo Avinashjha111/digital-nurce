@@ -7,6 +7,9 @@ export type AssistantContext = {
   clinicAddress?: string | null;
   clinicCity?: string | null;
   clinicPhone?: string | null;
+  clinicGoogleMapsLink?: string | null;
+  clinicServices?: string[] | null;
+  consultationFee?: number | null;
   doctorName?: string | null;
   doctorSpecialization?: string | null;
   doctorBio?: string | null;
@@ -70,7 +73,10 @@ export async function generateClinicAssistantReply(
     `Clinic Name: ${context.clinicName}`,
     context.doctorName ? `Chief Doctor: ${doctorInfo}` : null,
     context.clinicAddress ? `Address: ${context.clinicAddress}${context.clinicCity ? `, ${context.clinicCity}` : ""}` : null,
+    context.clinicGoogleMapsLink ? `Google Maps Location: ${context.clinicGoogleMapsLink}` : null,
     context.clinicPhone ? `Phone: ${context.clinicPhone}` : null,
+    context.consultationFee ? `Consultation Fee: ₹${context.consultationFee}` : null,
+    context.clinicServices && context.clinicServices.length > 0 ? `Services: ${context.clinicServices.join(", ")}` : null,
     context.doctorBio ? `Doctor Details: ${context.doctorBio}` : null,
     context.doctorTimings ? `Consultation Timings: ${context.doctorTimings}` : null,
   ]
